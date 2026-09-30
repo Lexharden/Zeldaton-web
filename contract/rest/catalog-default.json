@@ -1,0 +1,707 @@
+{
+  "items": [
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "weapon",
+      "id": "kokiri-sword",
+      "nameEn": "Kokiri Sword",
+      "nameEs": "Espada Kokiri",
+      "short": "EK",
+      "sortOrder": 100
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "shield",
+      "id": "deku-shield",
+      "nameEn": "Deku Shield",
+      "nameEs": "Escudo Deku",
+      "short": "ED",
+      "sortOrder": 110
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "tool",
+      "id": "fairy-slingshot",
+      "nameEn": "Fairy Slingshot",
+      "nameEs": "Tirachinas de Hada",
+      "short": "TI",
+      "sortOrder": 120
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "tool",
+      "id": "boomerang",
+      "nameEn": "Boomerang",
+      "nameEs": "Bumerán",
+      "short": "BU",
+      "sortOrder": 130
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "tool",
+      "id": "mask-of-truth",
+      "nameEn": "Mask of Truth",
+      "nameEs": "Máscara de la Verdad",
+      "short": "MV",
+      "sortOrder": 140
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "key",
+      "id": "zeldas-letter",
+      "nameEn": "Zelda's Letter",
+      "nameEs": "Carta de Zelda",
+      "short": "CZ",
+      "sortOrder": 150
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "stone",
+      "id": "kokiri-emerald",
+      "nameEn": "Kokiri's Emerald",
+      "nameEs": "Esmeralda Kokiri",
+      "short": "EM",
+      "sortOrder": 160
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "stone",
+      "id": "goron-ruby",
+      "nameEn": "Goron's Ruby",
+      "nameEs": "Rubí Goron",
+      "short": "RG",
+      "sortOrder": 170
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "stone",
+      "id": "zora-sapphire",
+      "nameEn": "Zora's Sapphire",
+      "nameEs": "Zafiro Zora",
+      "short": "ZS",
+      "sortOrder": 180
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "weapon",
+      "id": "master-sword",
+      "nameEn": "Master Sword",
+      "nameEs": "Espada Maestra",
+      "short": "ME",
+      "sortOrder": 200
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "weapon",
+      "id": "biggoron-sword",
+      "nameEn": "Biggoron's Sword",
+      "nameEs": "Espada de Biggoron",
+      "short": "EB",
+      "sortOrder": 210
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "weapon",
+      "id": "megaton-hammer",
+      "nameEn": "Megaton Hammer",
+      "nameEs": "Martillo Megatón",
+      "short": "MM",
+      "sortOrder": 220
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "shield",
+      "id": "mirror-shield",
+      "nameEn": "Mirror Shield",
+      "nameEs": "Escudo Espejo",
+      "short": "EE",
+      "sortOrder": 230
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "tunic",
+      "id": "goron-tunic",
+      "nameEn": "Goron Tunic",
+      "nameEs": "Túnica Goron",
+      "short": "TG",
+      "sortOrder": 240
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "tunic",
+      "id": "zora-tunic",
+      "nameEn": "Zora Tunic",
+      "nameEs": "Túnica Zora",
+      "short": "TZ",
+      "sortOrder": 250
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "boots",
+      "id": "iron-boots",
+      "nameEn": "Iron Boots",
+      "nameEs": "Botas de Hierro",
+      "short": "BH",
+      "sortOrder": 260
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "boots",
+      "id": "hover-boots",
+      "nameEn": "Hover Boots",
+      "nameEs": "Botas Aéreas",
+      "short": "BA",
+      "sortOrder": 270
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "tool",
+      "id": "bow",
+      "nameEn": "Fairy Bow",
+      "nameEs": "Arco de Hada",
+      "short": "AR",
+      "sortOrder": 280
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "tool",
+      "id": "hookshot",
+      "nameEn": "Hookshot",
+      "nameEs": "Gancho",
+      "short": "GA",
+      "sortOrder": 290
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "tool",
+      "id": "longshot",
+      "nameEn": "Longshot",
+      "nameEs": "Gancho Largo",
+      "short": "GL",
+      "sortOrder": 300
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "arrow",
+      "id": "fire-arrows",
+      "nameEn": "Fire Arrows",
+      "nameEs": "Flechas de Fuego",
+      "short": "FF",
+      "sortOrder": 310
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "arrow",
+      "id": "ice-arrows",
+      "nameEn": "Ice Arrows",
+      "nameEs": "Flechas de Hielo",
+      "short": "FH",
+      "sortOrder": 320
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "arrow",
+      "id": "light-arrows",
+      "nameEn": "Light Arrows",
+      "nameEs": "Flechas de Luz",
+      "short": "FL",
+      "sortOrder": 330
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "silver-gauntlets",
+      "nameEn": "Silver Gauntlets",
+      "nameEs": "Guanteletes de Plata",
+      "short": "GP",
+      "sortOrder": 340
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "golden-gauntlets",
+      "nameEn": "Golden Gauntlets",
+      "nameEs": "Guanteletes de Oro",
+      "short": "GO",
+      "sortOrder": 350
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "key",
+      "id": "gerudo-card",
+      "nameEn": "Gerudo Membership Card",
+      "nameEs": "Tarjeta Gerudo",
+      "short": "TJ",
+      "sortOrder": 360
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "medallion",
+      "id": "forest-medallion",
+      "nameEn": "Forest Medallion",
+      "nameEs": "Medallón del Bosque",
+      "short": "MB",
+      "sortOrder": 370
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "medallion",
+      "id": "fire-medallion",
+      "nameEn": "Fire Medallion",
+      "nameEs": "Medallón del Fuego",
+      "short": "MF",
+      "sortOrder": 380
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "medallion",
+      "id": "water-medallion",
+      "nameEn": "Water Medallion",
+      "nameEs": "Medallón del Agua",
+      "short": "MA",
+      "sortOrder": 390
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "medallion",
+      "id": "shadow-medallion",
+      "nameEn": "Shadow Medallion",
+      "nameEs": "Medallón de las Sombras",
+      "short": "MS",
+      "sortOrder": 400
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "medallion",
+      "id": "spirit-medallion",
+      "nameEn": "Spirit Medallion",
+      "nameEs": "Medallón del Espíritu",
+      "short": "MI",
+      "sortOrder": 410
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "medallion",
+      "id": "light-medallion",
+      "nameEn": "Light Medallion",
+      "nameEs": "Medallón de la Luz",
+      "short": "ML",
+      "sortOrder": 420
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "tool",
+      "id": "bombs",
+      "nameEn": "Bombs",
+      "nameEs": "Bombas",
+      "short": "BO",
+      "sortOrder": 500
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "tool",
+      "id": "bombchus",
+      "nameEn": "Bombchus",
+      "nameEs": "Bombchus",
+      "short": "BC",
+      "sortOrder": 510
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "shield",
+      "id": "hylian-shield",
+      "nameEn": "Hylian Shield",
+      "nameEs": "Escudo Hyliano",
+      "short": "EH",
+      "sortOrder": 520
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "tool",
+      "id": "ocarina-of-time",
+      "nameEn": "Ocarina of Time",
+      "nameEs": "Ocarina del Tiempo",
+      "short": "OT",
+      "sortOrder": 530
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "tool",
+      "id": "lens-of-truth",
+      "nameEn": "Lens of Truth",
+      "nameEs": "Lente de la Verdad",
+      "short": "LV",
+      "sortOrder": 540
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "tool",
+      "id": "bottle",
+      "nameEn": "Bottle",
+      "nameEs": "Botella",
+      "short": "BT",
+      "sortOrder": 550
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "spell",
+      "id": "dins-fire",
+      "nameEn": "Din's Fire",
+      "nameEs": "Fuego de Din",
+      "short": "FD",
+      "sortOrder": 560
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "spell",
+      "id": "farores-wind",
+      "nameEn": "Farore's Wind",
+      "nameEs": "Viento de Farore",
+      "short": "VF",
+      "sortOrder": 570
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "spell",
+      "id": "nayrus-love",
+      "nameEn": "Nayru's Love",
+      "nameEs": "Amor de Nayru",
+      "short": "AN",
+      "sortOrder": 580
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "bomb-bag",
+      "nameEn": "Bomb Bag",
+      "nameEs": "Bolsa de Bombas",
+      "short": "BB",
+      "sortOrder": 590
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "wallet",
+      "nameEn": "Wallet",
+      "nameEs": "Monedero",
+      "short": "MN",
+      "sortOrder": 600
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "goron-bracelet",
+      "nameEn": "Goron's Bracelet",
+      "nameEs": "Brazalete Goron",
+      "short": "BG",
+      "sortOrder": 610
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "silver-scale",
+      "nameEn": "Silver Scale",
+      "nameEs": "Escama de Plata",
+      "short": "EP",
+      "sortOrder": 620
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "golden-scale",
+      "nameEn": "Golden Scale",
+      "nameEs": "Escama de Oro",
+      "short": "EO",
+      "sortOrder": 630
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "magic-meter",
+      "nameEn": "Magic Meter",
+      "nameEs": "Medidor de Magia",
+      "short": "MG",
+      "sortOrder": 640
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "upgrade",
+      "id": "double-defense",
+      "nameEn": "Double Defense",
+      "nameEs": "Doble Defensa",
+      "short": "DD",
+      "sortOrder": 650
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "key",
+      "id": "stone-of-agony",
+      "nameEn": "Stone of Agony",
+      "nameEs": "Piedra del Dolor",
+      "short": "PD",
+      "sortOrder": 660
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "zeldas-lullaby",
+      "nameEn": "Zelda's Lullaby",
+      "nameEs": "Nana de Zelda",
+      "short": "♪",
+      "sortOrder": 700
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "eponas-song",
+      "nameEn": "Epona's Song",
+      "nameEs": "Canción de Epona",
+      "short": "♪",
+      "sortOrder": 710
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "sarias-song",
+      "nameEn": "Saria's Song",
+      "nameEs": "Canción de Saria",
+      "short": "♪",
+      "sortOrder": 720
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "suns-song",
+      "nameEn": "Sun's Song",
+      "nameEs": "Canción del Sol",
+      "short": "♪",
+      "sortOrder": 730
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "song-of-time",
+      "nameEn": "Song of Time",
+      "nameEs": "Canción del Tiempo",
+      "short": "♪",
+      "sortOrder": 740
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "song-of-storms",
+      "nameEn": "Song of Storms",
+      "nameEs": "Canción de la Tormenta",
+      "short": "♪",
+      "sortOrder": 750
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "minuet-of-forest",
+      "nameEn": "Minuet of Forest",
+      "nameEs": "Minueto del Bosque",
+      "short": "♪",
+      "sortOrder": 760
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "bolero-of-fire",
+      "nameEn": "Bolero of Fire",
+      "nameEs": "Bolero del Fuego",
+      "short": "♪",
+      "sortOrder": 770
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "serenade-of-water",
+      "nameEn": "Serenade of Water",
+      "nameEs": "Serenata del Agua",
+      "short": "♪",
+      "sortOrder": 780
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "requiem-of-spirit",
+      "nameEn": "Requiem of Spirit",
+      "nameEs": "Réquiem del Espíritu",
+      "short": "♪",
+      "sortOrder": 790
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "nocturne-of-shadow",
+      "nameEn": "Nocturne of Shadow",
+      "nameEs": "Nocturno de las Sombras",
+      "short": "♪",
+      "sortOrder": 800
+    },
+    {
+      "age": "both",
+      "enabled": true,
+      "group": "song",
+      "id": "prelude-of-light",
+      "nameEn": "Prelude of Light",
+      "nameEs": "Preludio de la Luz",
+      "short": "♪",
+      "sortOrder": 810
+    }
+  ],
+  "objectives": [
+    {
+      "age": "child",
+      "enabled": true,
+      "id": "kokiri-forest",
+      "nameEn": "Kokiri Forest",
+      "nameEs": "Bosque Kokiri",
+      "required": true,
+      "sortOrder": 10
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "id": "deku-tree",
+      "nameEn": "Deku Tree",
+      "nameEs": "Gran Árbol Deku",
+      "required": true,
+      "sortOrder": 20
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "id": "dodongos-cavern",
+      "nameEn": "Dodongo's Cavern",
+      "nameEs": "Cavernas Dodongo",
+      "required": true,
+      "sortOrder": 30
+    },
+    {
+      "age": "child",
+      "enabled": true,
+      "id": "jabu-jabu",
+      "nameEn": "Jabu-Jabu's Belly",
+      "nameEs": "Vientre de Jabu-Jabu",
+      "required": true,
+      "sortOrder": 40
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "forest-temple",
+      "nameEn": "Forest Temple",
+      "nameEs": "Templo del Bosque",
+      "required": true,
+      "sortOrder": 50
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "fire-temple",
+      "nameEn": "Fire Temple",
+      "nameEs": "Templo del Fuego",
+      "required": true,
+      "sortOrder": 60
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "water-temple",
+      "nameEn": "Water Temple",
+      "nameEs": "Templo del Agua",
+      "required": true,
+      "sortOrder": 70
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "shadow-temple",
+      "nameEn": "Shadow Temple",
+      "nameEs": "Templo de las Sombras",
+      "required": true,
+      "sortOrder": 80
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "spirit-temple",
+      "nameEn": "Spirit Temple",
+      "nameEs": "Templo del Espíritu",
+      "required": true,
+      "sortOrder": 90
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "ganons-castle",
+      "nameEn": "Ganon's Castle",
+      "nameEs": "Castillo de Ganon",
+      "required": true,
+      "sortOrder": 100
+    }
+  ],
+  "version": "231de902d755"
+}

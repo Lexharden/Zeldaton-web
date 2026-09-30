@@ -17,6 +17,8 @@ export interface RacerStream {
 }
 
 export interface RacerStats {
+  /** The Link being played right now. */
+  age?: 'child' | 'adult'
   hearts?: number
   maxHearts?: number
   rupees?: number

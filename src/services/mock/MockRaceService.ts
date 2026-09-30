@@ -1,3 +1,4 @@
+import { DEFAULT_CATALOG } from '@/config/catalog'
 import { OBJECTIVES, ITEMS } from '@/config/event'
 import { createMockActivity, nextActivityId } from '@/data/mock/activity'
 import { MOCK_AREAS, MOCK_BOSSES } from '@/data/mock/areas'
@@ -139,6 +140,10 @@ export class MockRaceService implements RaceApi {
   async getHiveShockStats() {
     await delay(400)
     return { ...this.stats }
+  }
+  async getCatalog() {
+    await delay(150)
+    return clone(DEFAULT_CATALOG)
   }
   async getClocks() {
     await delay(200)

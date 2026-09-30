@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import { computed, watch } from 'vue'
 import { ArrowLeft } from 'lucide-vue-next'
 import { RouterLink, useRoute } from 'vue-router'
+import AgeBadge from '@/components/common/AgeBadge.vue'
 import Avatar from '@/components/common/Avatar.vue'
 import GamingBackground from '@/components/common/GamingBackground.vue'
 import LiveBadge from '@/components/common/LiveBadge.vue'
@@ -115,7 +116,12 @@ const facts = computed(() => {
               />
               <div>
                 <div class="flex flex-wrap items-center gap-3">
-                  <LiveBadge :status="clock.status.value" /><span class="hud-label">{{
+                  <LiveBadge :status="clock.status.value" />
+                  <AgeBadge
+                    v-if="racer.stats?.age"
+                    :age="racer.stats.age"
+                    :prefix="t('age.nowPlaying')"
+                  /><span class="hud-label">{{
                     event.info?.game?.toUpperCase() ?? t('event.game')
                   }}</span>
                 </div>

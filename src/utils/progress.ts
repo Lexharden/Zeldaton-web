@@ -1,14 +1,18 @@
-import { t } from '@/i18n'
-import { OBJECTIVES } from '@/config/event'
+import type { CatalogObjective } from '@/types/catalog'
 import type { GameObjective, GameProgress } from '@/types/game'
 import type { Racer } from '@/types/racer'
 
-/** Builds the normalized GameProgress view from racer telemetry. */
-export function buildGameProgress(racer: Racer): GameProgress {
+/** Builds the normalized GameProgress view from racer telemetry and the objectives catalog. */
+export function buildGameProgress(
+  racer: Racer,
+  objectives: CatalogObjective[],
+  nameOf: (o: CatalogObjective) => string,
+): GameProgress {
   const done = new Set(racer.completedObjectives)
-  const objectives: GameObjective[] = OBJECTIVES.map((o) => ({
+  const list: GameObjective[] = objectives.map((o) => ({
     id: o.id,
-    label: t(`objectives.${o.id}`),
+    label: nameOf(o),
+    age: o.age,
     completed: done.has(o.id),
   }))
   return {
@@ -16,7 +20,7 @@ export function buildGameProgress(racer: Racer): GameProgress {
     currentArea: racer.currentArea,
     currentObjective: racer.currentObjective,
     completedObjectives: racer.completedObjectives,
-    objectives,
+    objectives: list,
   }
 }
 

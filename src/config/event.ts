@@ -1,3 +1,4 @@
+import { DEFAULT_CATALOG } from '@/config/catalog'
 import type { ItemDefinition, ObjectiveDefinition } from '@/types/game'
 import type { HiveShockCapability } from '@/types/hiveshock'
 
@@ -28,32 +29,16 @@ export const SHOWCASE_TIMEZONES = [
   'America/New_York',
 ] as const
 
-/** Ordered race track. Ids are what telemetry reports; labels come from i18n `objectives.<id>`. */
-export const OBJECTIVES: ObjectiveDefinition[] = [
-  { id: 'kokiri-forest' },
-  { id: 'deku-tree' },
-  { id: 'dodongos-cavern' },
-  { id: 'jabu-jabu' },
-  { id: 'forest-temple' },
-  { id: 'fire-temple' },
-  { id: 'water-temple' },
-  { id: 'shadow-temple' },
-  { id: 'spirit-temple' },
-  { id: 'ganons-castle' },
-]
+/** Ordered race track (factory catalog). Labels come from the catalog store; `objectives.<id>` is the fallback. */
+export const OBJECTIVES: ObjectiveDefinition[] = DEFAULT_CATALOG.objectives.map((o) => ({
+  id: o.id,
+}))
 
-/** Extensible: unknown item ids coming from telemetry are ignored. Labels: i18n `items.<id>`. */
-export const ITEMS: ItemDefinition[] = [
-  { id: 'master-sword', short: 'ME' },
-  { id: 'hookshot', short: 'GA' },
-  { id: 'longshot', short: 'GL' },
-  { id: 'bow', short: 'AR' },
-  { id: 'bombs', short: 'BO' },
-  { id: 'boomerang', short: 'BU' },
-  { id: 'megaton-hammer', short: 'MM' },
-  { id: 'iron-boots', short: 'BH' },
-  { id: 'mirror-shield', short: 'EE' },
-]
+/** Factory items. The live list comes from the catalog store; this feeds mock data and fallbacks. */
+export const ITEMS: ItemDefinition[] = DEFAULT_CATALOG.items.map((i) => ({
+  id: i.id,
+  short: i.short,
+}))
 
 /** Capability copy: i18n `hiveshock.cap.<id>`. Experimental features are labelled honestly. */
 export const HIVESHOCK_CAPABILITIES: HiveShockCapability[] = [

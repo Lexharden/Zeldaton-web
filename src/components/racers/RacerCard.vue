@@ -2,6 +2,7 @@
 import { t, tx } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import AgeBadge from '@/components/common/AgeBadge.vue'
 import Avatar from '@/components/common/Avatar.vue'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
@@ -82,9 +83,12 @@ const dim = computed(() => status.value === 'offline')
         <div class="border-t border-line pt-3">
           <p class="hud-label text-[10px]">{{ t('racers.location') }}</p>
           <p
-            class="mt-0.5 truncate font-display text-xl font-semibold uppercase tracking-wide text-secondary"
+            class="mt-0.5 flex items-center gap-2 truncate font-display text-xl font-semibold uppercase tracking-wide text-secondary"
           >
-            {{ racer.currentArea ? tx('areas', racer.currentArea) : t('racers.notStarted') }}
+            <span class="truncate">{{
+              racer.currentArea ? tx('areas', racer.currentArea) : t('racers.notStarted')
+            }}</span>
+            <AgeBadge v-if="racer.stats?.age" :age="racer.stats.age" short class="shrink-0" />
           </p>
         </div>
 

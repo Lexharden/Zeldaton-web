@@ -35,6 +35,7 @@ export class HttpRaceApi implements RaceApi {
   }
 
   getEvent = () => this.request<Awaited<ReturnType<RaceApi['getEvent']>>>('/event')
+  getCatalog = () => this.request<Awaited<ReturnType<RaceApi['getCatalog']>>>('/catalog')
   getRacers = () => this.request<Awaited<ReturnType<RaceApi['getRacers']>>>('/racers')
   getStandings = () => this.request<Awaited<ReturnType<RaceApi['getStandings']>>>('/standings')
   getRacer = (id: string) =>

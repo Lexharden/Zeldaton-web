@@ -2,6 +2,7 @@
  * Wire-contract test. The Rust backend generates `contract/**.json` (see backend/tests/contract.rs);
  * this test proves the frontend accepts exactly what the server emits.
  */
+import { DEFAULT_CATALOG } from '@/config/catalog'
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createPinia, setActivePinia } from 'pinia'
@@ -125,6 +126,18 @@ describe('rest fixtures', () => {
     for (const a of read<Record<string, unknown>[]>('rest/activity.json')) {
       expectKeys(a, ['id', 'timestampUtc', 'kind', 'message', 'code'])
     }
+    for (const file of ['rest/catalog.json', 'rest/catalog-default.json']) {
+      const c = read<{
+        version: string
+        items: Record<string, unknown>[]
+        objectives: Record<string, unknown>[]
+      }>(file)
+      expect(typeof c.version, file).toBe('string')
+      for (const i of c.items)
+        expectKeys(i, ['id', 'group', 'age', 'nameEs', 'nameEn', 'short', 'sortOrder', 'enabled'])
+      for (const o of c.objectives)
+        expectKeys(o, ['id', 'age', 'nameEs', 'nameEn', 'sortOrder', 'required', 'enabled'])
+    }
     expectKeys(read('rest/hiveshock-stats.json'), [
       'connectedRacers',
       'gameEvents',
@@ -136,7 +149,7 @@ describe('rest fixtures', () => {
 
   it('a backend racer renders through the existing view helpers', () => {
     const racer = read<Racer>('rest/racer.json')
-    const progress = buildGameProgress(racer)
+    const progress = buildGameProgress(racer, DEFAULT_CATALOG.objectives, (o) => o.nameEn)
     expect(progress.percentage).toBe(76)
     expect(progress.objectives.filter((o) => o.completed)).toHaveLength(2)
   })

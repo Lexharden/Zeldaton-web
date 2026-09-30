@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
 import { computed } from 'vue'
-import { OBJECTIVES } from '@/config/event'
+import { useCatalogStore } from '@/stores/catalog'
 import { useRaceStore } from '@/stores/race'
 import { useRacersStore } from '@/stores/racers'
 import { trackPosition } from '@/utils/status'
+import type { CatalogAge } from '@/types/catalog'
 import { RouterLink } from 'vue-router'
 import Avatar from '@/components/common/Avatar.vue'
 
@@ -15,10 +16,34 @@ import Avatar from '@/components/common/Avatar.vue'
  */
 const racers = useRacersStore()
 const race = useRaceStore()
+const catalog = useCatalogStore()
+const OBJECTIVES = computed(() => catalog.objectives)
 
-const nodes = computed(() => [
+interface TrackNode {
+  id: string
+  label: string
+  kind: 'edge' | 'node'
+  age?: CatalogAge
+}
+
+/** Node outline by Link: green for child dungeons, blue for adult temples. */
+const nodeBorder = (n: TrackNode) =>
+  n.kind === 'edge'
+    ? 'border-accent bg-accent/30'
+    : n.age === 'child'
+      ? 'border-success bg-background'
+      : n.age === 'adult'
+        ? 'border-secondary bg-background'
+        : 'border-primary bg-background'
+
+const nodes = computed<TrackNode[]>(() => [
   { id: 'start', label: t('game.startEdge'), kind: 'edge' as const },
-  ...OBJECTIVES.map((o) => ({ id: o.id, label: t(`objectives.${o.id}`), kind: 'node' as const })),
+  ...OBJECTIVES.value.map((o) => ({
+    id: o.id,
+    label: catalog.objectiveName(o),
+    age: o.age,
+    kind: 'node' as const,
+  })),
   { id: 'finish', label: t('game.finishEdge'), kind: 'edge' as const },
 ])
 
@@ -29,12 +54,14 @@ const markers = computed(() => {
     if (!r) return []
     const fraction = trackPosition(
       r.completedObjectives.length,
-      OBJECTIVES.length,
+      OBJECTIVES.value.length,
       r.progressPercentage,
     )
     // node index 0..total+1 -> fraction along the track
     const slot =
-      r.status === 'finished' ? OBJECTIVES.length + 1 : Math.round(fraction * OBJECTIVES.length)
+      r.status === 'finished'
+        ? OBJECTIVES.value.length + 1
+        : Math.round(fraction * OBJECTIVES.value.length)
     const stack = (stackAt[slot] = (stackAt[slot] ?? -1) + 1)
     return [{ racer: r, rank: s.rank, slot, stack }]
   })
@@ -65,12 +92,7 @@ const pct = (slot: number) => `${(slot / (nodes.value.length - 1)) * 100}%`
             class="absolute -translate-x-1/2"
             :style="{ left: pct(i), top: `${trackY - 6}px` }"
           >
-            <span
-              class="mx-auto block size-4 rotate-45 border-2"
-              :class="
-                n.kind === 'edge' ? 'border-accent bg-accent/30' : 'border-primary bg-background'
-              "
-            />
+            <span class="mx-auto block size-4 rotate-45 border-2" :class="nodeBorder(n)" />
             <span
               class="hud-label mt-4 block w-20 text-center text-[9px] leading-tight"
               :class="n.kind === 'edge' && '!text-accent'"
@@ -107,9 +129,7 @@ const pct = (slot: number) => `${(slot / (nodes.value.length - 1)) * 100}%`
           />
           <span
             class="relative z-10 mt-1 size-4 shrink-0 rotate-45 border-2"
-            :class="
-              n.kind === 'edge' ? 'border-accent bg-accent/40' : 'border-primary bg-background'
-            "
+            :class="nodeBorder(n)"
           />
           <div class="min-w-0 flex-1">
             <p

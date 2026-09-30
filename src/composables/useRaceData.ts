@@ -1,6 +1,7 @@
 import { watch } from 'vue'
 import { getTransport } from '@/services/websocket'
 import { dispatchMessage } from '@/services/websocket/dispatcher'
+import { useCatalogStore } from '@/stores/catalog'
 import { useConnectionStore } from '@/stores/connection'
 import { useEventStore } from '@/stores/event'
 import { useHiveShockStore } from '@/stores/hiveshock'
@@ -21,9 +22,10 @@ export function useRaceData() {
   const race = useRaceStore()
   const hive = useHiveShockStore()
   const connection = useConnectionStore()
+  const catalog = useCatalogStore()
 
   async function loadAll() {
-    await Promise.allSettled([event.load(), racers.load(), hive.load()])
+    await Promise.allSettled([event.load(), racers.load(), hive.load(), catalog.load()])
     await race.load()
   }
 

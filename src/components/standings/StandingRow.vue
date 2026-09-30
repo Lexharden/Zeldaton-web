@@ -2,6 +2,7 @@
 import { t, tx } from '@/i18n'
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import AgeBadge from '@/components/common/AgeBadge.vue'
 import Avatar from '@/components/common/Avatar.vue'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
@@ -57,9 +58,12 @@ const medal = computed(() =>
             formatPercent(racer.progressPercentage)
           }}</span>
         </span>
-        <span class="truncate text-sm text-secondary">{{
-          racer.currentArea ? tx('areas', racer.currentArea) : '—'
-        }}</span>
+        <span class="flex items-center gap-2 truncate text-sm text-secondary"
+          ><span class="truncate">{{
+            racer.currentArea ? tx('areas', racer.currentArea) : '—'
+          }}</span
+          ><AgeBadge v-if="racer.stats?.age" :age="racer.stats.age" short class="shrink-0"
+        /></span>
         <ClockDisplay :seconds="clock.usedSeconds.value" size="sm" tone="muted" />
         <ClockDisplay
           :seconds="clock.remainingSeconds.value"

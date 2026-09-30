@@ -323,6 +323,13 @@ fn rest_payloads_match_their_fixtures() {
         "rest/catalog.json",
         json!({ "version": sample.version(), "items": sample.items, "objectives": sample.objectives }),
     );
+    // The full factory catalog: the website ships it as its offline/mock fallback, so it can never
+    // drift from what the server seeds.
+    let factory = full.public();
+    check(
+        "rest/catalog-default.json",
+        json!({ "version": factory.version(), "items": factory.items, "objectives": factory.objectives }),
+    );
     check(
         "rest/activity.json",
         serde_json::to_value(vec![activity()]).unwrap(),

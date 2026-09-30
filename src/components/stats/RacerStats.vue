@@ -2,7 +2,8 @@
 import { t } from '@/i18n'
 import { computed } from 'vue'
 import { Gem, Heart, Skull, Sword, Swords } from 'lucide-vue-next'
-import { ITEMS, OBJECTIVES } from '@/config/event'
+import AgeBadge from '@/components/common/AgeBadge.vue'
+import { useCatalogStore } from '@/stores/catalog'
 import type { Racer } from '@/types/racer'
 import { countItems } from '@/utils/progress'
 
@@ -12,6 +13,7 @@ import { countItems } from '@/utils/progress'
  */
 const props = defineProps<{ racer: Racer }>()
 const s = computed(() => props.racer.stats)
+const catalog = useCatalogStore()
 const hearts = computed(() => {
   const max = s.value?.maxHearts
   const cur = s.value?.hearts
@@ -20,7 +22,7 @@ const hearts = computed(() => {
 const items = computed(() =>
   countItems(
     props.racer,
-    ITEMS.map((i) => i.id),
+    catalog.items.map((i) => i.id),
   ),
 )
 const dash = (v: number | undefined) => (v === undefined ? '—' : String(v))
@@ -34,9 +36,12 @@ const dash = (v: number | undefined) => (v === undefined ? '—' : String(v))
           <span class="hud-label flex items-center gap-2"
             ><Heart class="size-3.5 text-danger" aria-hidden="true" />{{ t('game.hearts') }}</span
           >
-          <span class="num text-lg font-bold text-white"
-            >{{ dash(hearts.cur) }} / {{ dash(hearts.max) }}</span
-          >
+          <span class="flex items-center gap-3">
+            <AgeBadge v-if="s?.age" :age="s.age" :prefix="t('age.nowPlaying')" />
+            <span class="num text-lg font-bold text-white"
+              >{{ dash(hearts.cur) }} / {{ dash(hearts.max) }}</span
+            >
+          </span>
         </div>
         <div
           v-if="hearts.slots"
@@ -74,7 +79,9 @@ const dash = (v: number | undefined) => (v === undefined ? '—' : String(v))
           label: t('game.bosses'),
           icon: Swords,
           value:
-            s?.bossesDefeated === undefined ? '—' : `${s.bossesDefeated} / ${OBJECTIVES.length}`,
+            s?.bossesDefeated === undefined
+              ? '—'
+              : `${s.bossesDefeated} / ${catalog.objectives.length}`,
           tone: 'text-magenta',
         },
       ]"

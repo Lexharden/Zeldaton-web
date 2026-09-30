@@ -1,3 +1,4 @@
+import type { Catalog } from '@/types/catalog'
 import type { EventInfo } from '@/types/event'
 import type { HiveShockStats } from '@/types/hiveshock'
 import type { Racer } from '@/types/racer'
@@ -13,6 +14,7 @@ export interface RaceApi {
   getActivity(): Promise<ActivityItem[]>
   getHiveShockStats(): Promise<HiveShockStats>
   getClocks(): Promise<ClockState[]>
+  getCatalog(): Promise<Catalog>
 }
 
 export type ApiErrorKind = 'timeout' | 'http' | 'network' | 'malformed' | 'not-found'

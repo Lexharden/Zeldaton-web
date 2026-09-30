@@ -1,6 +1,10 @@
+import type { CatalogAge } from './catalog'
+
 export interface GameObjective {
   id: string
   label: string
+  /** Which Link reaches it (child temples / adult temples). */
+  age: CatalogAge
   completed: boolean
   completedAtUtc?: string
 }

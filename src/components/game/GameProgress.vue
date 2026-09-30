@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { t, tx } from '@/i18n'
+import { computed } from 'vue'
 import { Check, Circle } from 'lucide-vue-next'
+import AgeBadge from '@/components/common/AgeBadge.vue'
+import { useCatalogStore } from '@/stores/catalog'
+import type { CatalogAge } from '@/types/catalog'
 import type { GameProgress } from '@/types/game'
+import { AGE_ORDER } from '@/utils/catalog'
 import { formatPercent } from '@/utils/format'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 
@@ -9,7 +14,16 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
  * Full progress panel: percentage, current area/objective and the objectives checklist.
  * Data: a normalized GameProgress (see utils/progress.buildGameProgress).
  */
-defineProps<{ progress: GameProgress }>()
+const props = defineProps<{ progress: GameProgress }>()
+const catalog = useCatalogStore()
+
+/** Objectives split by Link (child dungeons / adult temples), each with its own counter. */
+const sections = computed(() =>
+  AGE_ORDER.flatMap((age: CatalogAge) => {
+    const list = props.progress.objectives.filter((o) => o.age === age)
+    return list.length ? [{ age, list, done: list.filter((o) => o.completed).length }] : []
+  }),
+)
 </script>
 
 <template>
@@ -41,7 +55,7 @@ defineProps<{ progress: GameProgress }>()
         <dd class="mt-1 text-sm text-white">
           {{
             progress.currentObjective
-              ? tx('objectives', progress.currentObjective)
+              ? catalog.objectiveName(progress.currentObjective)
               : t('game.noObjective')
           }}
         </dd>
@@ -50,14 +64,24 @@ defineProps<{ progress: GameProgress }>()
 
     <div>
       <p class="hud-label mb-3">{{ t('game.objectives') }}</p>
-      <ul class="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        <li v-for="o in progress.objectives" :key="o.id" class="flex items-center gap-3 text-sm">
-          <Check v-if="o.completed" class="size-4 shrink-0 text-success" aria-hidden="true" />
-          <Circle v-else class="size-4 shrink-0 text-white/20" aria-hidden="true" />
-          <span :class="o.completed ? 'text-white' : 'text-muted'">{{ o.label }}</span>
-          <span class="sr-only">{{ o.completed ? t('game.completed') : t('game.pending') }}</span>
-        </li>
-      </ul>
+      <div class="grid gap-6 sm:grid-cols-2">
+        <section v-for="s in sections" :key="s.age" :aria-label="t(`age.${s.age}`)">
+          <div class="mb-2 flex items-center justify-between">
+            <AgeBadge :age="s.age" />
+            <span class="num text-xs text-muted">{{ s.done }} / {{ s.list.length }}</span>
+          </div>
+          <ul class="space-y-2">
+            <li v-for="o in s.list" :key="o.id" class="flex items-center gap-3 text-sm">
+              <Check v-if="o.completed" class="size-4 shrink-0 text-success" aria-hidden="true" />
+              <Circle v-else class="size-4 shrink-0 text-white/20" aria-hidden="true" />
+              <span :class="o.completed ? 'text-white' : 'text-muted'">{{ o.label }}</span>
+              <span class="sr-only">{{
+                o.completed ? t('game.completed') : t('game.pending')
+              }}</span>
+            </li>
+          </ul>
+        </section>
+      </div>
     </div>
   </div>
 </template>

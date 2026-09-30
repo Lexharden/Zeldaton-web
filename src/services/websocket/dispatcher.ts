@@ -1,3 +1,4 @@
+import { useCatalogStore } from '@/stores/catalog'
 import { useConnectionStore } from '@/stores/connection'
 import { useHiveShockStore } from '@/stores/hiveshock'
 import { useRaceStore } from '@/stores/race'
@@ -87,7 +88,7 @@ export function dispatchMessage(message: WsMessage, serverTimeUtc?: string): voi
       hive.pushActivity(message.activity)
       break
     case 'CATALOG_UPDATED':
-      // The catalog store (phase 3) reloads from the API when its version differs.
+      void useCatalogStore().onUpdated(message.version)
       break
     case 'STREAM_UPDATED':
       racers.patch(message.racerId, { stream: message.stream })
