@@ -1,0 +1,12 @@
+.git
+.idea
+.github
+node_modules
+dist
+target
+data
+.env
+.env.*
+!.env.example
+*.db*
+dev-tokens.json
