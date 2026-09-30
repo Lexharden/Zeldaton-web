@@ -1,0 +1,46 @@
+{
+  "items": [
+    {
+      "age": "child",
+      "enabled": true,
+      "group": "weapon",
+      "id": "kokiri-sword",
+      "nameEn": "Kokiri Sword",
+      "nameEs": "Espada Kokiri",
+      "short": "EK",
+      "sortOrder": 100
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "group": "weapon",
+      "icon": "/art/items/master-sword.png",
+      "id": "master-sword",
+      "nameEn": "Master Sword",
+      "nameEs": "Espada Maestra",
+      "short": "ME",
+      "sortOrder": 200
+    }
+  ],
+  "objectives": [
+    {
+      "age": "child",
+      "enabled": true,
+      "id": "kokiri-forest",
+      "nameEn": "Kokiri Forest",
+      "nameEs": "Bosque Kokiri",
+      "required": true,
+      "sortOrder": 10
+    },
+    {
+      "age": "adult",
+      "enabled": true,
+      "id": "forest-temple",
+      "nameEn": "Forest Temple",
+      "nameEs": "Templo del Bosque",
+      "required": true,
+      "sortOrder": 50
+    }
+  ],
+  "version": "ec7a171b0a0a"
+}

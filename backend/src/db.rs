@@ -10,6 +10,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use tokio::sync::mpsc::UnboundedReceiver;
 
+use crate::catalog::{Age, Catalog, CatalogItem, CatalogObjective, default_catalog};
 use crate::clock::Checkpoint;
 use crate::domain::*;
 use crate::state::{FinishInfo, RaceState, RacerRuntime};
@@ -83,6 +84,10 @@ pub enum PersistOp {
     Activity(ActivityItem),
     Counters(HiveShockStats),
     Audit(AuditRow),
+    CatalogItem(Box<CatalogItem>),
+    DeleteCatalogItem(String),
+    CatalogObjective(Box<CatalogObjective>),
+    DeleteCatalogObjective(String),
 }
 
 fn rfc(d: DateTime<Utc>) -> String {
@@ -219,6 +224,52 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .execute(pool)
             .await?;
         }
+        PersistOp::CatalogItem(i) => {
+            sqlx::query(
+                "INSERT INTO catalog_items (id,grp,age,name_es,name_en,short,icon,sort_order,enabled) VALUES (?,?,?,?,?,?,?,?,?)
+                 ON CONFLICT(id) DO UPDATE SET grp=excluded.grp, age=excluded.age, name_es=excluded.name_es, name_en=excluded.name_en,
+                   short=excluded.short, icon=excluded.icon, sort_order=excluded.sort_order, enabled=excluded.enabled",
+            )
+            .bind(&i.id)
+            .bind(&i.group)
+            .bind(i.age.as_str())
+            .bind(&i.name_es)
+            .bind(&i.name_en)
+            .bind(&i.short)
+            .bind(&i.icon)
+            .bind(i.sort_order)
+            .bind(i.enabled)
+            .execute(pool)
+            .await?;
+        }
+        PersistOp::DeleteCatalogItem(id) => {
+            sqlx::query("DELETE FROM catalog_items WHERE id = ?")
+                .bind(id)
+                .execute(pool)
+                .await?;
+        }
+        PersistOp::CatalogObjective(o) => {
+            sqlx::query(
+                "INSERT INTO catalog_objectives (id,age,name_es,name_en,sort_order,required,enabled) VALUES (?,?,?,?,?,?,?)
+                 ON CONFLICT(id) DO UPDATE SET age=excluded.age, name_es=excluded.name_es, name_en=excluded.name_en,
+                   sort_order=excluded.sort_order, required=excluded.required, enabled=excluded.enabled",
+            )
+            .bind(&o.id)
+            .bind(o.age.as_str())
+            .bind(&o.name_es)
+            .bind(&o.name_en)
+            .bind(o.sort_order)
+            .bind(o.required)
+            .bind(o.enabled)
+            .execute(pool)
+            .await?;
+        }
+        PersistOp::DeleteCatalogObjective(id) => {
+            sqlx::query("DELETE FROM catalog_objectives WHERE id = ?")
+                .bind(id)
+                .execute(pool)
+                .await?;
+        }
         PersistOp::Audit(a) => {
             sqlx::query(
                 "INSERT INTO audit_log (ts,actor,action,racer_id,payload) VALUES (?,?,?,?,?)",
@@ -242,6 +293,67 @@ pub async fn writer(pool: SqlitePool, mut rx: UnboundedReceiver<PersistOp>) {
             tracing::error!(error = %e, "failed to persist state change");
         }
     }
+}
+
+/// Reads the catalog tables. Empty tables mean "not seeded yet": the factory catalog is used.
+pub async fn load_catalog(pool: &SqlitePool) -> Result<Catalog, sqlx::Error> {
+    let items: Vec<CatalogItem> = sqlx::query("SELECT * FROM catalog_items ORDER BY sort_order, id")
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|r| CatalogItem {
+            id: r.get("id"),
+            group: r.get("grp"),
+            age: Age::parse(&r.get::<String, _>("age")),
+            name_es: r.get("name_es"),
+            name_en: r.get("name_en"),
+            short: r.get("short"),
+            icon: r.get("icon"),
+            sort_order: r.get("sort_order"),
+            enabled: r.get::<i64, _>("enabled") != 0,
+        })
+        .collect();
+    let objectives: Vec<CatalogObjective> =
+        sqlx::query("SELECT * FROM catalog_objectives ORDER BY sort_order, id")
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(|r| CatalogObjective {
+                id: r.get("id"),
+                age: Age::parse(&r.get::<String, _>("age")),
+                name_es: r.get("name_es"),
+                name_en: r.get("name_en"),
+                sort_order: r.get("sort_order"),
+                required: r.get::<i64, _>("required") != 0,
+                enabled: r.get::<i64, _>("enabled") != 0,
+            })
+            .collect();
+    if items.is_empty() && objectives.is_empty() {
+        return Ok(default_catalog());
+    }
+    Ok(Catalog { items, objectives })
+}
+
+/// Writes the factory catalog when the tables are empty (first start, or a database created
+/// before the catalog existed). Never touches a catalog the organizer already edited.
+pub async fn ensure_catalog(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catalog_items")
+        .fetch_one(pool)
+        .await?;
+    let objectives: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catalog_objectives")
+        .fetch_one(pool)
+        .await?;
+    if items > 0 || objectives > 0 {
+        return Ok(false);
+    }
+    let catalog = default_catalog();
+    for item in catalog.items {
+        apply(pool, PersistOp::CatalogItem(Box::new(item))).await?;
+    }
+    for objective in catalog.objectives {
+        apply(pool, PersistOp::CatalogObjective(Box::new(objective))).await?;
+    }
+    Ok(true)
 }
 
 pub async fn has_event(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
@@ -397,12 +509,15 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
         })
         .min_by(|a, b| a.finished_at_utc.cmp(&b.finished_at_utc));
 
+    let catalog = load_catalog(pool).await?;
+
     Ok(Some(RaceState {
         event,
         racers,
         activity,
         stats,
         winner,
+        catalog,
     }))
 }
 

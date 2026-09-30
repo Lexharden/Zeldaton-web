@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
-use crate::catalog;
+use crate::catalog::{CatalogItem, CatalogObjective};
 use crate::clock::{Checkpoint, format_hms, next_reset_utc, parse_local_time};
 use crate::db::{IdentityRow, PersistOp, RacerStateRow};
 use crate::domain::*;
@@ -508,7 +508,7 @@ impl RaceState {
                 if !playing {
                     return Err(IngestError::OutOfSequence("no active session"));
                 }
-                if !catalog::is_item(&item) {
+                if !self.catalog.is_item(&item) {
                     return Err(IngestError::Invalid(format!("unknown item `{item}`")));
                 }
                 if self.racers[i]
@@ -677,7 +677,7 @@ impl RaceState {
         if let Some(list) = p.completed_objectives.take() {
             let mut out: Vec<String> = Vec::new();
             for id in list {
-                if !catalog::is_objective(&id) {
+                if !self.catalog.is_objective(&id) {
                     return Err(IngestError::Invalid(format!("unknown objective `{id}`")));
                 }
                 if !out.contains(&id) {
@@ -990,6 +990,88 @@ impl RaceState {
         Ok(fx)
     }
 
+    // ---- catalog (organizer) ------------------------------------------------------------------
+
+    fn catalog_updated(&self, fx: &mut Fx) {
+        fx.msgs.push(WsMessage::CatalogUpdated {
+            version: self.catalog.version(),
+        });
+    }
+
+    pub fn catalog_upsert_item(&mut self, mut item: CatalogItem) -> Result<Fx, String> {
+        item.id = item.id.trim().to_string();
+        item.name_es = item.name_es.trim().to_string();
+        item.name_en = item.name_en.trim().to_string();
+        item.short = item.short.trim().to_string();
+        item.icon = item.icon.map(|i| i.trim().to_string()).filter(|i| !i.is_empty());
+        item.validate()?;
+        match self.catalog.items.iter_mut().find(|i| i.id == item.id) {
+            Some(existing) => *existing = item.clone(),
+            None => self.catalog.items.push(item.clone()),
+        }
+        let mut fx = Fx::default();
+        fx.ops.push(PersistOp::CatalogItem(Box::new(item)));
+        self.catalog_updated(&mut fx);
+        Ok(fx)
+    }
+
+    pub fn catalog_delete_item(&mut self, id: &str) -> Result<Fx, String> {
+        let before = self.catalog.items.len();
+        self.catalog.items.retain(|i| i.id != id);
+        if self.catalog.items.len() == before {
+            return Err("item not found".into());
+        }
+        let mut fx = Fx::default();
+        fx.ops.push(PersistOp::DeleteCatalogItem(id.to_string()));
+        self.catalog_updated(&mut fx);
+        Ok(fx)
+    }
+
+    pub fn catalog_upsert_objective(&mut self, mut objective: CatalogObjective) -> Result<Fx, String> {
+        objective.id = objective.id.trim().to_string();
+        objective.name_es = objective.name_es.trim().to_string();
+        objective.name_en = objective.name_en.trim().to_string();
+        objective.validate()?;
+        // A required objective that nobody may report would make the race impossible to finish.
+        if !objective.enabled
+            && self
+                .event
+                .rules
+                .required_objective_ids
+                .contains(&objective.id)
+        {
+            return Err("this objective is required by the event rules; remove it from the rules first".into());
+        }
+        match self
+            .catalog
+            .objectives
+            .iter_mut()
+            .find(|o| o.id == objective.id)
+        {
+            Some(existing) => *existing = objective.clone(),
+            None => self.catalog.objectives.push(objective.clone()),
+        }
+        let mut fx = Fx::default();
+        fx.ops.push(PersistOp::CatalogObjective(Box::new(objective)));
+        self.catalog_updated(&mut fx);
+        Ok(fx)
+    }
+
+    pub fn catalog_delete_objective(&mut self, id: &str) -> Result<Fx, String> {
+        if self.event.rules.required_objective_ids.iter().any(|o| o == id) {
+            return Err("this objective is required by the event rules; remove it from the rules first".into());
+        }
+        let before = self.catalog.objectives.len();
+        self.catalog.objectives.retain(|o| o.id != id);
+        if self.catalog.objectives.len() == before {
+            return Err("objective not found".into());
+        }
+        let mut fx = Fx::default();
+        fx.ops.push(PersistOp::DeleteCatalogObjective(id.to_string()));
+        self.catalog_updated(&mut fx);
+        Ok(fx)
+    }
+
     pub fn update_event(&mut self, p: EventPatch) -> Result<Fx, String> {
         if let Some(s) = &p.start_at_utc {
             DateTime::parse_from_rfc3339(s).map_err(|_| "startAtUtc must be RFC 3339")?;
@@ -1010,7 +1092,7 @@ impl RaceState {
             self.event.daily_budget_seconds = b;
         }
         if let Some(ids) = &p.required_objective_ids {
-            if let Some(bad) = ids.iter().find(|id| !catalog::is_objective(id)) {
+            if let Some(bad) = ids.iter().find(|id| !self.catalog.is_objective(id)) {
                 return Err(format!("unknown objective `{bad}`"));
             }
             self.event.rules.required_objective_ids = ids.clone();

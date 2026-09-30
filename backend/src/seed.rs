@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use chrono::{DateTime, Utc};
 
 use crate::auth::{hash_token, random_token};
-use crate::catalog::OBJECTIVES;
+use crate::catalog::default_catalog;
 use crate::db::PersistOp;
 use crate::domain::*;
 use crate::engine::{NewRacer, iso};
@@ -41,7 +41,7 @@ pub fn default_event() -> EventInfo {
         rules: EventRules {
             win_condition:
                 "First racer to complete all required objectives crosses the finish line.".into(),
-            required_objective_ids: OBJECTIVES.iter().map(|s| s.to_string()).collect(),
+            required_objective_ids: default_catalog().default_required(),
         },
     }
 }
@@ -60,8 +60,15 @@ pub fn build(now: DateTime<Utc>) -> Seeded {
         activity: VecDeque::new(),
         stats: HiveShockStats::default(),
         winner: None,
+        catalog: default_catalog(),
     };
     let mut ops = vec![PersistOp::Event(state.event.clone())];
+    for item in &state.catalog.items {
+        ops.push(PersistOp::CatalogItem(Box::new(item.clone())));
+    }
+    for objective in &state.catalog.objectives {
+        ops.push(PersistOp::CatalogObjective(Box::new(objective.clone())));
+    }
     let mut tokens = vec![];
     for (id, name) in ROSTER {
         let token = random_token();

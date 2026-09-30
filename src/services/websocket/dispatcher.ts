@@ -86,6 +86,9 @@ export function dispatchMessage(message: WsMessage, serverTimeUtc?: string): voi
     case 'LIVE_ACTIVITY':
       hive.pushActivity(message.activity)
       break
+    case 'CATALOG_UPDATED':
+      // The catalog store (phase 3) reloads from the API when its version differs.
+      break
     case 'STREAM_UPDATED':
       racers.patch(message.racerId, { stream: message.stream })
       break

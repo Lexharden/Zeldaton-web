@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::catalog::Catalog;
 use crate::clock::Checkpoint;
 use crate::domain::{ActivityItem, ClockState, EventInfo, HiveShockStats, Racer};
 
@@ -53,6 +54,8 @@ pub struct RaceState {
     pub activity: VecDeque<ActivityItem>,
     pub stats: HiveShockStats,
     pub winner: Option<FinishInfo>,
+    /// Items and objectives racers may report (edited from the organizer panel).
+    pub catalog: Catalog,
 }
 
 pub const MAX_ACTIVITY: usize = 60;

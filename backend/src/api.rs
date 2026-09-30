@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/activity", get(activity))
         .route("/hiveshock/stats", get(hiveshock_stats))
         .route("/clocks", get(clocks))
+        .route("/catalog", get(catalog))
         // Live race data must never be served from a stale cache.
         .layer(SetResponseHeaderLayer::overriding(
             CACHE_CONTROL,
@@ -82,6 +83,12 @@ async fn activity(State(hub): State<AppState>) -> Json<Vec<ActivityItem>> {
 
 async fn hiveshock_stats(State(hub): State<AppState>) -> Json<HiveShockStats> {
     Json(hub.stats())
+}
+
+/// Items and objectives (enabled only, in display order) plus a content `version` clients can compare.
+async fn catalog(State(hub): State<AppState>) -> Json<Value> {
+    let c = hub.catalog_public();
+    Json(json!({ "version": c.version(), "items": c.items, "objectives": c.objectives }))
 }
 
 async fn clocks(State(hub): State<AppState>) -> Json<Vec<ClockState>> {

@@ -275,12 +275,7 @@ fn finishing_requires_every_required_objective() {
     );
 
     let all = GameProgressPatch {
-        completed_objectives: Some(
-            zeldathon_server::catalog::OBJECTIVES
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-        ),
+        completed_objectives: Some(zeldathon_server::catalog::default_catalog().default_required()),
         ..Default::default()
     };
     ingest(
@@ -442,4 +437,183 @@ fn losing_hiveshock_clears_the_reported_viewers() {
     let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
     assert_eq!(stream.viewers, None);
     assert!(!stream.is_live);
+}
+
+// ---- catalog ------------------------------------------------------------------------------------
+
+use zeldathon_server::catalog::{Age, CatalogItem, CatalogObjective};
+
+fn new_item(id: &str) -> CatalogItem {
+    CatalogItem {
+        id: id.into(),
+        group: "tool".into(),
+        age: Age::Both,
+        name_es: "Nuevo".into(),
+        name_en: "New".into(),
+        short: "NW".into(),
+        icon: None,
+        sort_order: 999,
+        enabled: true,
+    }
+}
+
+#[test]
+fn the_factory_catalog_is_loaded_and_ingest_accepts_the_new_items() {
+    let mut s = state(t0());
+    assert!(s.catalog.items.len() >= 60);
+    start(&mut s, "ralbat", t0());
+    // Items that did not exist before the catalog grew.
+    for item in ["kokiri-sword", "hover-boots", "nayrus-love", "forest-medallion", "zeldas-lullaby"] {
+        ingest(
+            &mut s,
+            "ralbat",
+            IngestMsg::ItemAcquired { item: item.into() },
+            t0(),
+        )
+        .unwrap_or_else(|e| panic!("{item}: {e}"));
+    }
+    let racer = s.view(s.idx("ralbat").unwrap(), t0());
+    assert_eq!(racer.items.get("hover-boots"), Some(&true));
+    // Still unknown.
+    let err = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::ItemAcquired {
+            item: "banana".into(),
+        },
+        t0(),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), "invalid");
+}
+
+#[test]
+fn a_new_catalog_item_is_reportable_and_a_disabled_one_is_not() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+
+    let fx = s.catalog_upsert_item(new_item("magic-beans")).unwrap();
+    assert_eq!(kinds(&fx), vec!["CATALOG_UPDATED"]);
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::ItemAcquired {
+            item: "magic-beans".into(),
+        },
+        t0(),
+    )
+    .unwrap();
+
+    let mut off = new_item("magic-beans");
+    off.enabled = false;
+    s.catalog_upsert_item(off).unwrap();
+    let err = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::ItemAcquired {
+            item: "magic-beans".into(),
+        },
+        t0(),
+    );
+    // Already owned counts as a repeat first; a different racer proves the rejection.
+    assert!(err.is_ok() || err.unwrap_err().code() == "invalid");
+    start(&mut s, "xime", t0());
+    assert_eq!(
+        ingest(
+            &mut s,
+            "xime",
+            IngestMsg::ItemAcquired {
+                item: "magic-beans".into()
+            },
+            t0()
+        )
+        .unwrap_err()
+        .code(),
+        "invalid"
+    );
+    assert!(!s.catalog.public().items.iter().any(|i| i.id == "magic-beans"));
+}
+
+#[test]
+fn catalog_edits_are_validated_and_deletes_report_missing_entries() {
+    let mut s = state(t0());
+    let mut bad = new_item("Not Valid");
+    assert!(s.catalog_upsert_item(bad.clone()).is_err());
+    bad.id = "fine-id".into();
+    bad.group = "nope".into();
+    assert!(s.catalog_upsert_item(bad).is_err());
+
+    s.catalog_upsert_item(new_item("temp-item")).unwrap();
+    let fx = s.catalog_delete_item("temp-item").unwrap();
+    assert_eq!(kinds(&fx), vec!["CATALOG_UPDATED"]);
+    assert!(s.catalog_delete_item("temp-item").is_err());
+}
+
+#[test]
+fn required_objectives_cannot_be_disabled_or_deleted_but_others_can() {
+    let mut s = state(t0());
+    let mut ganon = s
+        .catalog
+        .objectives
+        .iter()
+        .find(|o| o.id == "ganons-castle")
+        .unwrap()
+        .clone();
+    ganon.enabled = false;
+    assert!(s.catalog_upsert_objective(ganon).is_err());
+    assert!(s.catalog_delete_objective("ganons-castle").is_err());
+
+    // Once it is no longer required by the event, it can go.
+    s.update_event(EventPatch {
+        required_objective_ids: Some(vec!["deku-tree".into()]),
+        ..Default::default()
+    })
+    .unwrap();
+    s.catalog_delete_objective("ganons-castle").unwrap();
+    assert!(!s.catalog.objective_exists("ganons-castle"));
+
+    let extra = CatalogObjective {
+        id: "bonus-goal".into(),
+        age: Age::Child,
+        name_es: "Bono".into(),
+        name_en: "Bonus".into(),
+        sort_order: 5,
+        required: false,
+        enabled: true,
+    };
+    s.catalog_upsert_objective(extra).unwrap();
+    assert!(s.catalog.is_objective("bonus-goal"));
+}
+
+#[test]
+fn stats_carry_the_current_link_age() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StatsUpdated {
+            stats: RacerStats {
+                age: Some(LinkAge::Child),
+                ..Default::default()
+            },
+        },
+        t0(),
+    )
+    .unwrap();
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StatsUpdated {
+            stats: RacerStats {
+                hearts: Some(3.0),
+                ..Default::default()
+            },
+        },
+        t0(),
+    )
+    .unwrap();
+    let stats = s.view(s.idx("ralbat").unwrap(), t0()).stats.unwrap();
+    assert_eq!(stats.age, Some(LinkAge::Child), "a partial update keeps the age");
+    assert_eq!(stats.hearts, Some(3.0));
 }

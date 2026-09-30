@@ -149,6 +149,52 @@ impl Hub {
         self.read(|s| s.activity.iter().cloned().collect())
     }
 
+    /// The whole catalog, disabled entries included (organizer view).
+    pub fn catalog_all(&self) -> crate::catalog::Catalog {
+        self.read(|s| s.catalog.clone())
+    }
+
+    /// What the public site and HiveShock see: enabled entries in display order.
+    pub fn catalog_public(&self) -> crate::catalog::Catalog {
+        self.read(|s| s.catalog.public())
+    }
+
+    pub fn catalog_upsert_item(
+        &self,
+        item: crate::catalog::CatalogItem,
+        now: DateTime<Utc>,
+    ) -> Result<(), String> {
+        self.mutate(now, |s| match s.catalog_upsert_item(item) {
+            Ok(fx) => (fx, Ok(())),
+            Err(e) => (Fx::default(), Err(e)),
+        })
+    }
+
+    pub fn catalog_delete_item(&self, id: &str, now: DateTime<Utc>) -> Result<(), String> {
+        self.mutate(now, |s| match s.catalog_delete_item(id) {
+            Ok(fx) => (fx, Ok(())),
+            Err(e) => (Fx::default(), Err(e)),
+        })
+    }
+
+    pub fn catalog_upsert_objective(
+        &self,
+        objective: crate::catalog::CatalogObjective,
+        now: DateTime<Utc>,
+    ) -> Result<(), String> {
+        self.mutate(now, |s| match s.catalog_upsert_objective(objective) {
+            Ok(fx) => (fx, Ok(())),
+            Err(e) => (Fx::default(), Err(e)),
+        })
+    }
+
+    pub fn catalog_delete_objective(&self, id: &str, now: DateTime<Utc>) -> Result<(), String> {
+        self.mutate(now, |s| match s.catalog_delete_objective(id) {
+            Ok(fx) => (fx, Ok(())),
+            Err(e) => (Fx::default(), Err(e)),
+        })
+    }
+
     pub fn stats(&self) -> HiveShockStats {
         self.read(|s| {
             let mut st = s.stats.clone();

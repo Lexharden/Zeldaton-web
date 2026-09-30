@@ -151,9 +151,20 @@ pub struct StreamState {
     pub viewers: Option<i64>,
 }
 
+/// Which Link the racer is playing right now.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkAge {
+    Child,
+    Adult,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RacerStats {
+    /// The Link being played (child or adult).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub age: Option<LinkAge>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hearts: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -183,6 +194,9 @@ impl RacerStats {
         }
         if patch.bosses_defeated.is_some() {
             self.bosses_defeated = patch.bosses_defeated;
+        }
+        if patch.age.is_some() {
+            self.age = patch.age;
         }
     }
 }
@@ -404,6 +418,10 @@ pub enum WsMessage {
     StreamUpdated {
         racer_id: String,
         stream: StreamState,
+    },
+    /// The organizer changed the catalog: clients reload it. `version` is the new content hash.
+    CatalogUpdated {
+        version: String,
     },
 }
 

@@ -143,6 +143,7 @@ fn ws_samples() -> Vec<(&'static str, WsMessage)> {
             WsMessage::StatsUpdated {
                 racer_id: id(),
                 stats: RacerStats {
+                    age: Some(LinkAge::Adult),
                     hearts: Some(17.0),
                     rupees: Some(210),
                     ..Default::default()
@@ -182,6 +183,12 @@ fn ws_samples() -> Vec<(&'static str, WsMessage)> {
             },
         ),
         (
+            "CATALOG_UPDATED",
+            WsMessage::CatalogUpdated {
+                version: "a1b2c3d4e5f6".into(),
+            },
+        ),
+        (
             "HIVESHOCK_STATS_UPDATED",
             WsMessage::HiveshockStatsUpdated {
                 stats: HiveShockStats {
@@ -201,7 +208,7 @@ fn every_websocket_message_matches_its_fixture() {
     let samples = ws_samples();
     assert_eq!(
         samples.len(),
-        18,
+        19,
         "one fixture per message type in src/types/websocket.ts"
     );
     for (name, msg) in samples {
@@ -304,6 +311,17 @@ fn rest_payloads_match_their_fixtures() {
     check(
         "rest/stream.json",
         json!({ "racerId": "ralbat", "isLive": true, "viewers": 1200 }),
+    );
+    // A trimmed public catalog: the shape is what matters (the real one has ~70 entries).
+    let full = zeldathon_server::catalog::default_catalog();
+    let mut sample = zeldathon_server::catalog::Catalog {
+        items: vec![full.items[0].clone(), full.items[9].clone()],
+        objectives: vec![full.objectives[0].clone(), full.objectives[4].clone()],
+    };
+    sample.items[1].icon = Some("/art/items/master-sword.png".into());
+    check(
+        "rest/catalog.json",
+        json!({ "version": sample.version(), "items": sample.items, "objectives": sample.objectives }),
     );
     check(
         "rest/activity.json",

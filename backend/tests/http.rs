@@ -528,3 +528,32 @@ async fn organizer_actions_push_the_official_clock_to_hiveshock_immediately() {
     let after = pushed["clock"]["remainingMs"].as_i64().unwrap();
     assert!(before - after >= 599_000, "before={before} after={after}");
 }
+
+#[tokio::test]
+async fn public_catalog_lists_items_and_objectives_by_age() {
+    let h = harness().await;
+    let (s, c) = call(&h, "GET", "/api/catalog", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(c["version"].as_str().unwrap().len(), 12);
+    let items = c["items"].as_array().unwrap();
+    assert!(items.len() >= 60);
+    assert!(items.iter().all(|i| i["enabled"] == true));
+    let ages: std::collections::HashSet<_> =
+        items.iter().map(|i| i["age"].as_str().unwrap()).collect();
+    assert_eq!(ages, ["child", "adult", "both"].into_iter().collect());
+    let objectives = c["objectives"].as_array().unwrap();
+    assert_eq!(objectives.len(), 10);
+    assert_eq!(objectives[0]["id"], "kokiri-forest");
+    assert_eq!(objectives[0]["age"], "child");
+}
+
+#[tokio::test]
+async fn an_existing_database_without_a_catalog_gets_the_factory_one() {
+    let pool = db::connect("sqlite::memory:").await.unwrap();
+    db::migrate(&pool).await.unwrap();
+    assert!(db::ensure_catalog(&pool).await.unwrap(), "seeded once");
+    assert!(!db::ensure_catalog(&pool).await.unwrap(), "never again");
+    let loaded = db::load_catalog(&pool).await.unwrap();
+    assert!(loaded.items.len() >= 60);
+    assert_eq!(loaded, zeldathon_server::catalog::default_catalog().clone_sorted());
+}

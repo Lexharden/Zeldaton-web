@@ -44,6 +44,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Databases created before the catalog existed get the factory one (never overwrites edits).
+    if db::ensure_catalog(&pool).await? {
+        tracing::info!("catalog seeded with the factory items and objectives");
+    }
+
     let mut state = db::load(&pool).await?.expect("event exists after seeding");
     state.recover(Utc::now());
     tracing::info!(racers = state.racers.len(), "state loaded");
