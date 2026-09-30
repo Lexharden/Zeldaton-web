@@ -501,3 +501,30 @@ async fn http_batch_ingest_applies_events_in_order() {
     let (_, r) = call(&h, "GET", "/api/racers/speaksins", None, None).await;
     assert_eq!(r["currentArea"], "lake-hylia");
 }
+
+#[tokio::test]
+async fn organizer_actions_push_the_official_clock_to_hiveshock_immediately() {
+    let h = harness().await;
+    make_event_live(&h).await;
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    let hello = wait_for(&mut hs, "CLOCK").await;
+    let before = hello["clock"]["remainingMs"].as_i64().unwrap();
+
+    // No heartbeat is sent: the new value must arrive on its own.
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/racers/cuaco/actions/adjust-time",
+        Some(ADMIN),
+        Some(json!({ "deltaSeconds": -600, "reason": "test" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let pushed = wait_for(&mut hs, "CLOCK").await;
+    assert_eq!(pushed["clock"]["racerId"], "cuaco");
+    let after = pushed["clock"]["remainingMs"].as_i64().unwrap();
+    assert!(before - after >= 599_000, "before={before} after={after}");
+}

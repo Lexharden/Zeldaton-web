@@ -43,6 +43,9 @@ Area ids are free-form; ids the website knows (e.g. `water-temple`) are translat
 
 - `{"type":"ACK","id":"..."}`: applied (or already applied).
 - `{"type":"CLOCK","clock":{ remainingMs, status, resetAtUtc, serverTimeUtc, racerId }}`: official time, in reply to `HELLO`/`HEARTBEAT`.
+  It is also **pushed on its own** (no `id`) right after an organizer action or a status change that
+  affects the racer's clock (pause/resume, adjust-time, reset-day, daily reset), so the overlay does not
+  have to wait for the next heartbeat. Clients must accept a `CLOCK` at any time.
 - `{"type":"ERROR","id":"...","code":"...","message":"..."}`. Codes: `invalid`, `event_not_live`,
   `out_of_sequence`, `requirements_not_met`, `exhausted`, `replaced`.
 - `{"type":"GAME_FORCE_CLOSE"}`: **the daily time reached zero: close the game now.** Also sent if a

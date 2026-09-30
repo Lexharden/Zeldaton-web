@@ -74,6 +74,12 @@ impl Hub {
     }
 
     fn publish(&self, state: &RaceState, fx: Fx, now: DateTime<Utc>) {
+        self.publish_with(state, fx, now, true);
+    }
+
+    /// `push_clock`: also send a fresh `CLOCK` to the racer's HiveShock for clock-changing messages.
+    /// Off for the racer's own ingest calls, whose replies already carry what they need.
+    fn publish_with(&self, state: &RaceState, fx: Fx, now: DateTime<Utc>, push_clock: bool) {
         let stamp = iso(now);
         for msg in &fx.msgs {
             // No receivers is fine (nobody is watching yet).
@@ -87,6 +93,23 @@ impl Hub {
                 && let Some(h) = &state.racers[i].ingest
             {
                 let _ = h.tx.send(down);
+            }
+        }
+        // HiveShock's overlay must not wait for the next heartbeat after an organizer action or a
+        // status change: push the official clock right away to the racer it concerns.
+        let mut pushed: Vec<&str> = Vec::new();
+        for msg in fx.msgs.iter().filter(|_| push_clock) {
+            let Some(racer_id) = clock_affected_racer(msg) else {
+                continue;
+            };
+            if pushed.contains(&racer_id) {
+                continue;
+            }
+            pushed.push(racer_id);
+            if let Some(i) = state.idx(racer_id)
+                && let Some(h) = &state.racers[i].ingest
+            {
+                let _ = h.tx.send(IngestDown::Clock(state.clock(i, now)));
             }
         }
     }
@@ -175,7 +198,7 @@ impl Hub {
         let mut guard = self.lock();
         match guard.apply_ingest(id, env, now) {
             Ok((fx, reply)) => {
-                self.publish(&guard, fx, now);
+                self.publish_with(&guard, fx, now, false);
                 Ok(reply)
             }
             Err(e) => {
@@ -272,5 +295,20 @@ impl Hub {
             Ok(fx) => (fx, Ok(())),
             Err(e) => (Fx::default(), Err(e)),
         })
+    }
+}
+
+/// The racer whose official clock a public message changes (so ingest gets a fresh `CLOCK`).
+fn clock_affected_racer(msg: &WsMessage) -> Option<&str> {
+    match msg {
+        WsMessage::ClockSync { clock } | WsMessage::DailyReset { clock, .. } => {
+            Some(clock.racer_id.as_str())
+        }
+        WsMessage::SessionStarted { racer_id }
+        | WsMessage::SessionPaused { racer_id }
+        | WsMessage::SessionResumed { racer_id }
+        | WsMessage::SessionExhausted { racer_id }
+        | WsMessage::RacerStatusChanged { racer_id, .. } => Some(racer_id.as_str()),
+        _ => None,
     }
 }
