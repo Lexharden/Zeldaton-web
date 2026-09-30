@@ -53,15 +53,24 @@ validates the same files, so the two sides cannot drift apart silently.
 
 Every organizer action lands in the `audit_log` table, the official record of the session.
 
-## Deploy
+## Deploy (Docker + native nginx on the VPS)
+
+Backend and website run as containers bound to localhost (`127.0.0.1:8080` / `:8081`); the nginx
+installed on the VPS terminates TLS and proxies to them.
 
 ```bash
-npm run build                                   # website -> dist/  (use VITE_API_URL=/api VITE_WS_URL=/ws)
-ADMIN_TOKEN=<long random> SITE_ADDRESS=zeldathon.example.com docker compose up -d --build
+cp .env.example .env            # set SITE_ADDRESS and ADMIN_TOKEN (openssl rand -hex 32)
+docker compose up -d --build
+docker compose logs backend     # first run prints the racer ingest tokens ONCE
+
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/zeldathon   # edit the domain
+sudo ln -s /etc/nginx/sites-available/zeldathon /etc/nginx/sites-enabled/
+sudo certbot certonly --nginx -d zeldathon.example.com           # or use --nginx on a plain :80 block first
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Caddy serves `dist/`, proxies `/api`, `/ws` and `/ingest` to the backend and handles HTTPS. Back up
-`./data/zeldathon.db` (e.g. `sqlite3 data/zeldathon.db ".backup backup.db"`).
+The SQLite database lives in the `zeldathon_data` volume. Back it up with
+`docker compose exec backend ...` or `docker run --rm -v zeldaton-web_zeldathon_data:/data -v $PWD:/out debian cp /data/zeldathon.db /out/`.
 
 ## Before the event
 

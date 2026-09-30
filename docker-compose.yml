@@ -1,5 +1,7 @@
-# Production-style stack:  npm run build && docker compose up -d --build
-#   ADMIN_TOKEN=<long random> SITE_ADDRESS=zeldathon.example.com docker compose up -d --build
+# Frontend + backend in Docker; nginx runs natively on the VPS (see deploy/nginx.conf).
+#   cp .env.example .env   (set ADMIN_TOKEN, SITE_ADDRESS)   then:
+#   docker compose up -d --build
+# Both services listen on localhost only; the host nginx is the single public entry point.
 services:
   backend:
     build:
@@ -8,23 +10,26 @@ services:
     restart: unless-stopped
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN (>= 16 chars)}
-      CORS_ORIGINS: https://${SITE_ADDRESS:-localhost}
-      RUST_LOG: info
+      CORS_ORIGINS: https://${SITE_ADDRESS:?set SITE_ADDRESS (e.g. zeldathon.example.com)}
+      STALE_HEARTBEAT_SECS: ${STALE_HEARTBEAT_SECS:-20}
+      RUST_LOG: ${RUST_LOG:-info}
     volumes:
-      - ./data:/data
-    expose: ["8080"]
+      - zeldathon_data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
 
-  caddy:
-    image: caddy:2
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_MOCK_MODE: "false"
+        VITE_DEMO_MODE: "false"
+        VITE_API_URL: /api
+        VITE_WS_URL: /ws
     restart: unless-stopped
-    depends_on: [backend]
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./dist:/srv:ro
-      - caddy_data:/data
+    ports:
+      - "127.0.0.1:8081:8080"
 
 volumes:
-  caddy_data:
+  zeldathon_data:
