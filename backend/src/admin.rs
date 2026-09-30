@@ -72,6 +72,7 @@ pub fn router(hub: AppState) -> Router<AppState> {
             put(put_objective).delete(delete_objective),
         )
         .route("/audit", get(audit))
+        .route("/donations", get(donations))
         .layer(middleware::from_fn_with_state(hub, authenticate));
     Router::new()
         .route("/auth/login", post(login))
@@ -858,4 +859,44 @@ async fn audit(
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(rows))
+}
+
+// ---- time donations -------------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct DonationsQuery {
+    racer: Option<String>,
+    limit: Option<i64>,
+}
+
+/// Time donations reported by HiveShock: the ledger (newest first), totals per racer for the whole
+/// event and for today (what counts against the daily limits), and the current policy.
+async fn donations(
+    State(hub): State<AppState>,
+    Query(q): Query<DonationsQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let racer = q.racer.as_deref().filter(|r| !r.is_empty());
+    let recent = db::donations_tail(&hub.pool, racer, q.limit.unwrap_or(200).clamp(1, 1000))
+        .await
+        .map_err(ApiError::internal)?;
+    let totals = db::donation_totals(&hub.pool)
+        .await
+        .map_err(ApiError::internal)?;
+    let (policy, today) = hub.read(|s| {
+        let today: Vec<Value> = s
+            .racers
+            .iter()
+            .map(|r| {
+                json!({
+                    "racerId": r.racer.id,
+                    "addedSeconds": r.donation_added_ms / 1000,
+                    "removedSeconds": r.donation_removed_ms / 1000,
+                })
+            })
+            .collect();
+        (s.event.donation_time.clone(), today)
+    });
+    Ok(Json(
+        json!({ "policy": policy, "today": today, "totals": totals, "recent": recent }),
+    ))
 }

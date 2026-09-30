@@ -55,6 +55,14 @@ export function shortDuration(totalSeconds: number): string {
   return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`
 }
 
+/** "45 s", "2 min 30 s", "1 h 5 min" (sign dropped). */
+export function secondsLabel(totalSeconds: number): string {
+  const s = Math.abs(Math.round(totalSeconds))
+  if (s < 60) return `${s} s`
+  if (s < 3600) return `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`
+  return shortDuration(s)
+}
+
 /** Readable text for an audit action code, e.g. "racer.adjust-time" -> "Ajustar tiempo". */
 const ACTIONS: Record<string, string> = {
   'auth.login': 'Inició sesión',

@@ -1,7 +1,7 @@
 //! SQLite persistence. The in-memory state is authoritative at runtime; every change is written
 //! through by a single writer task so the process can restart without losing clocks or progress.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
@@ -51,6 +51,25 @@ pub struct RacerStateRow {
     pub final_time_seconds: Option<i64>,
     pub last_heartbeat_at: Option<DateTime<Utc>>,
     pub stream: StreamState,
+    pub donation_added_ms: i64,
+    pub donation_removed_ms: i64,
+}
+
+/// One row of the time-donation ledger.
+#[derive(Clone, Debug)]
+pub struct TimeDonationRow {
+    pub ts: DateTime<Utc>,
+    pub racer_id: String,
+    pub client_id: String,
+    pub platform: Platform,
+    pub currency: DonationCurrency,
+    pub amount: i64,
+    pub gift: Option<String>,
+    pub gift_count: Option<i64>,
+    pub viewer: Option<String>,
+    pub requested_ms: i64,
+    pub applied_ms: i64,
+    pub limited_by: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -84,6 +103,7 @@ pub enum PersistOp {
     Activity(ActivityItem),
     Counters(HiveShockStats),
     Audit(AuditRow),
+    TimeDonation(Box<TimeDonationRow>),
     CatalogItem(Box<CatalogItem>),
     DeleteCatalogItem(String),
     CatalogObjective(Box<CatalogObjective>),
@@ -104,12 +124,13 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
     match op {
         PersistOp::Event(e) => {
             sqlx::query(
-                "INSERT INTO event (id,name,game,edition,status,start_at_utc,end_at_utc,timezone,daily_budget_seconds,daily_reset_local_time,win_condition,required_objective_ids)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                "INSERT INTO event (id,name,game,edition,status,start_at_utc,end_at_utc,timezone,daily_budget_seconds,daily_reset_local_time,win_condition,required_objective_ids,donation_time)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(id) DO UPDATE SET name=excluded.name, game=excluded.game, edition=excluded.edition, status=excluded.status,
                    start_at_utc=excluded.start_at_utc, end_at_utc=excluded.end_at_utc, timezone=excluded.timezone,
                    daily_budget_seconds=excluded.daily_budget_seconds, daily_reset_local_time=excluded.daily_reset_local_time,
-                   win_condition=excluded.win_condition, required_objective_ids=excluded.required_objective_ids",
+                   win_condition=excluded.win_condition, required_objective_ids=excluded.required_objective_ids,
+                   donation_time=excluded.donation_time",
             )
             .bind(&e.id)
             .bind(&e.name)
@@ -123,20 +144,22 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .bind(&e.daily_reset_local_time)
             .bind(&e.rules.win_condition)
             .bind(serde_json::to_string(&e.rules.required_objective_ids).unwrap_or_default())
+            .bind(serde_json::to_string(&e.donation_time).unwrap_or_else(|_| "{}".into()))
             .execute(pool)
             .await?;
         }
         PersistOp::RacerState(r) => {
             sqlx::query(
-                "INSERT INTO racer_state (racer_id,status,remaining_ms,checkpoint_at,reset_at,played_ms_total,progress_pct,current_area,current_objective,completed_objectives,items,stats,finished_at,final_time_seconds,last_heartbeat_at,stream_live,viewers,thumbnail_url)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                "INSERT INTO racer_state (racer_id,status,remaining_ms,checkpoint_at,reset_at,played_ms_total,progress_pct,current_area,current_objective,completed_objectives,items,stats,finished_at,final_time_seconds,last_heartbeat_at,stream_live,viewers,thumbnail_url,donation_added_ms,donation_removed_ms)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(racer_id) DO UPDATE SET status=excluded.status, remaining_ms=excluded.remaining_ms, checkpoint_at=excluded.checkpoint_at,
                    reset_at=excluded.reset_at, played_ms_total=excluded.played_ms_total, progress_pct=excluded.progress_pct,
                    current_area=excluded.current_area, current_objective=excluded.current_objective,
                    completed_objectives=excluded.completed_objectives, items=excluded.items, stats=excluded.stats,
                    finished_at=excluded.finished_at, final_time_seconds=excluded.final_time_seconds,
                    last_heartbeat_at=excluded.last_heartbeat_at, stream_live=excluded.stream_live,
-                   viewers=excluded.viewers, thumbnail_url=excluded.thumbnail_url",
+                   viewers=excluded.viewers, thumbnail_url=excluded.thumbnail_url,
+                   donation_added_ms=excluded.donation_added_ms, donation_removed_ms=excluded.donation_removed_ms",
             )
             .bind(&r.racer_id)
             .bind(r.status.as_str())
@@ -156,6 +179,8 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .bind(r.stream.is_live)
             .bind(r.stream.viewers)
             .bind(&r.stream.thumbnail_url)
+            .bind(r.donation_added_ms)
+            .bind(r.donation_removed_ms)
             .execute(pool)
             .await?;
         }
@@ -269,6 +294,27 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
                 .bind(id)
                 .execute(pool)
                 .await?;
+        }
+        PersistOp::TimeDonation(d) => {
+            // OR IGNORE: the unique (racer_id, client_id) already guarantees one row per donation.
+            sqlx::query(
+                "INSERT OR IGNORE INTO time_donations (ts,racer_id,client_id,platform,currency,amount,gift,gift_count,viewer,requested_ms,applied_ms,limited_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            )
+            .bind(rfc(d.ts))
+            .bind(&d.racer_id)
+            .bind(&d.client_id)
+            .bind(d.platform.as_str())
+            .bind(d.currency.as_str())
+            .bind(d.amount)
+            .bind(&d.gift)
+            .bind(d.gift_count)
+            .bind(&d.viewer)
+            .bind(d.requested_ms)
+            .bind(d.applied_ms)
+            .bind(&d.limited_by)
+            .execute(pool)
+            .await?;
         }
         PersistOp::Audit(a) => {
             sqlx::query(
@@ -389,6 +435,8 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
             )
             .unwrap_or_default(),
         },
+        donation_time: serde_json::from_str(&e.get::<String, _>("donation_time"))
+            .unwrap_or_default(),
     };
 
     let mut channels: HashMap<String, Vec<Channel>> = HashMap::new();
@@ -408,11 +456,23 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
         }
     }
 
+    let mut donation_ids: HashMap<String, HashSet<String>> = HashMap::new();
+    for d in sqlx::query("SELECT racer_id, client_id FROM time_donations")
+        .fetch_all(pool)
+        .await?
+    {
+        donation_ids
+            .entry(d.get("racer_id"))
+            .or_default()
+            .insert(d.get("client_id"));
+    }
+
     let mut racers = Vec::new();
     let rows = sqlx::query(
         "SELECT r.*, s.status, s.remaining_ms, s.checkpoint_at, s.reset_at, s.played_ms_total, s.progress_pct,
                 s.current_area, s.current_objective, s.completed_objectives, s.items, s.stats, s.finished_at,
-                s.final_time_seconds, s.last_heartbeat_at, s.stream_live, s.viewers, s.thumbnail_url
+                s.final_time_seconds, s.last_heartbeat_at, s.stream_live, s.viewers, s.thumbnail_url,
+                s.donation_added_ms, s.donation_removed_ms
          FROM racers r JOIN racer_state s ON s.racer_id = r.id ORDER BY r.sort_order, r.display_name",
     )
     .fetch_all(pool)
@@ -464,6 +524,9 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
                 .map(|s| parse_dt(&s)),
             ingest: None,
             seen_ids: VecDeque::new(),
+            donation_added_ms: r.get("donation_added_ms"),
+            donation_removed_ms: r.get("donation_removed_ms"),
+            donation_ids: donation_ids.remove(&id).unwrap_or_default(),
         });
     }
 
@@ -540,6 +603,63 @@ pub async fn audit_tail(
                 "action": r.get::<String, _>("action"),
                 "racerId": r.get::<Option<String>, _>("racer_id"),
                 "payload": serde_json::from_str::<serde_json::Value>(&r.get::<String, _>("payload")).unwrap_or_default(),
+            })
+        })
+        .collect())
+}
+
+/// Latest time donations, newest first; `racer` narrows it to one racer.
+pub async fn donations_tail(
+    pool: &SqlitePool,
+    racer: Option<&str>,
+    limit: i64,
+) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT * FROM time_donations WHERE (?1 IS NULL OR racer_id = ?1) ORDER BY id DESC LIMIT ?2",
+    )
+    .bind(racer)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<i64, _>("id"),
+                "ts": r.get::<String, _>("ts"),
+                "racerId": r.get::<String, _>("racer_id"),
+                "platform": r.get::<String, _>("platform"),
+                "currency": r.get::<String, _>("currency"),
+                "amount": r.get::<i64, _>("amount"),
+                "gift": r.get::<Option<String>, _>("gift"),
+                "giftCount": r.get::<Option<i64>, _>("gift_count"),
+                "viewer": r.get::<Option<String>, _>("viewer"),
+                "requestedSeconds": r.get::<i64, _>("requested_ms") / 1000,
+                "appliedSeconds": r.get::<i64, _>("applied_ms") / 1000,
+                "limitedBy": r.get::<Option<String>, _>("limited_by"),
+            })
+        })
+        .collect())
+}
+
+/// Whole-event totals per racer: donations, seconds added and seconds removed.
+pub async fn donation_totals(pool: &SqlitePool) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT racer_id, COUNT(*) AS n,
+                COALESCE(SUM(CASE WHEN applied_ms > 0 THEN applied_ms ELSE 0 END), 0) AS added,
+                COALESCE(SUM(CASE WHEN applied_ms < 0 THEN -applied_ms ELSE 0 END), 0) AS removed
+         FROM time_donations GROUP BY racer_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "racerId": r.get::<String, _>("racer_id"),
+                "donations": r.get::<i64, _>("n"),
+                "addedSeconds": r.get::<i64, _>("added") / 1000,
+                "removedSeconds": r.get::<i64, _>("removed") / 1000,
             })
         })
         .collect())

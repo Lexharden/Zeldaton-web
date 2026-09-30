@@ -1,5 +1,5 @@
 import type { Catalog, CatalogItem, CatalogObjective } from '@/types/catalog'
-import type { EventInfo } from '@/types/event'
+import type { DonationTimePolicy, EventInfo } from '@/types/event'
 import type { HiveShockStats } from '@/types/hiveshock'
 import type { ActivityItem } from '@/types/race'
 import type { Racer } from '@/types/racer'
@@ -97,6 +97,40 @@ export interface EventPatchInput {
   dailyResetLocalTime?: string
   winCondition?: string
   requiredObjectiveIds?: string[]
+  donationTime?: DonationTimePolicy
+}
+
+/** One time donation as HiveShock reported it and what the clock really got. */
+export interface DonationRow {
+  id: number
+  ts: string
+  racerId: string
+  platform: 'tiktok' | 'twitch'
+  currency: 'diamonds' | 'bits'
+  amount: number
+  gift: string | null
+  giftCount: number | null
+  viewer: string | null
+  requestedSeconds: number
+  appliedSeconds: number
+  /** Why less than asked was applied: per_donation, daily_limit, clock_max, clock_zero. */
+  limitedBy: string | null
+}
+
+export interface DonationTotals {
+  racerId: string
+  donations: number
+  addedSeconds: number
+  removedSeconds: number
+}
+
+export interface DonationsResponse {
+  policy: DonationTimePolicy
+  /** What counts against today's limits, per racer. */
+  today: { racerId: string; addedSeconds: number; removedSeconds: number }[]
+  /** Whole event. */
+  totals: DonationTotals[]
+  recent: DonationRow[]
 }
 
 export type EventAction = 'start' | 'pause' | 'resume' | 'finish'

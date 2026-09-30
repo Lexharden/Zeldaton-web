@@ -37,6 +37,15 @@ fn handle_text(hub: &AppState, racer_id: &str, text: &str) -> Value {
     match hub.ingest(racer_id, env, Utc::now()) {
         Ok(Reply::Ack) => json!({ "type": "ACK", "id": id }),
         Ok(Reply::Clock(clock)) => json!({ "type": "CLOCK", "id": id, "clock": clock }),
+        Ok(Reply::TimeApplied(t)) => {
+            let mut out = json!({ "type": "TIME_APPLIED", "id": id });
+            if let (Some(o), Ok(Value::Object(fields))) =
+                (out.as_object_mut(), serde_json::to_value(&*t))
+            {
+                o.extend(fields);
+            }
+            out
+        }
         Err(e) => json!({ "type": "ERROR", "id": id, "code": e.code(), "message": e.to_string() }),
     }
 }

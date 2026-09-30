@@ -50,7 +50,7 @@ validates the same files, so the two sides cannot drift apart silently.
 | Public WebSocket | `/ws`: `CLOCK_SNAPSHOT` on connect, then live events (types in `src/types/websocket.ts`) |
 | HiveShock ingestion | `WS /ingest`, `POST /ingest/events`; see [docs/hiveshock-ingest.md](docs/hiveshock-ingest.md) |
 | Public catalog | `GET /api/catalog` (items and objectives by Link, enabled only) + `CATALOG_UPDATED` on the socket |
-| Organizer `/api/admin` | Session cookie (roles admin / moderator) or Bearer `ADMIN_TOKEN` (emergency): overview, event start/pause/resume/finish, racers + channels, tokens, pause/resume/force-close/reset-day/adjust-time/finish, catalog, accounts, audit log |
+| Organizer `/api/admin` | Session cookie (roles admin / moderator) or Bearer `ADMIN_TOKEN` (emergency): overview, event start/pause/resume/finish, racers + channels, tokens, pause/resume/force-close/reset-day/adjust-time/finish, catalog, accounts, audit log, time donations |
 
 Every organizer action lands in the `audit_log` table, the official record of the session (with who did it).
 
@@ -67,9 +67,10 @@ ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed O
 | Page | What for |
 | --- | --- |
 | Panel | Live dashboard: **start / pause / finish the event**, who is connected, clocks, progress, alerts, activity |
-| Event | Start/end, daily time, reset hour, win condition, objectives required to finish |
+| Event | Start/end, daily time, reset hour, win condition, objectives required to finish, **limits for time from donations** |
 | Racers | Create/edit, channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
 | Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. The site and HiveShock update on their own |
+| Donations | Time that TikTok gifts / Twitch bits added or removed, per racer (today and whole event) and one by one |
 | Audit | Who did what and when |
 | Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |
 

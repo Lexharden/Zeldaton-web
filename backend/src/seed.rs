@@ -43,6 +43,7 @@ pub fn default_event() -> EventInfo {
                 "First racer to complete all required objectives crosses the finish line.".into(),
             required_objective_ids: default_catalog().default_required(),
         },
+        donation_time: DonationTimePolicy::default(),
     }
 }
 

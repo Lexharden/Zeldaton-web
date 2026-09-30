@@ -176,6 +176,8 @@ export const en: Messages = {
     SESSION_EXHAUSTED: '{racer} ran out of time',
     DAILY_RESET: 'Daily reset completed for {racer}',
     GAME_FINISHED: '{racer} completed Ocarina of Time',
+    TIME_ADDED: '{racer} gained {subject} of time from donations',
+    TIME_REMOVED: '{racer} lost {subject} of time from donations',
     terminal: 'LIVE EVENT FEED',
     waiting: 'waiting for events',
     system: 'SYSTEM',

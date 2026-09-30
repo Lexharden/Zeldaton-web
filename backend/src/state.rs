@@ -1,6 +1,6 @@
 //! In-memory authoritative state. All mutation goes through `engine.rs`.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
@@ -39,6 +39,12 @@ pub struct RacerRuntime {
     pub ingest: Option<IngestHandle>,
     /// Recent client event ids, for idempotent retries.
     pub seen_ids: VecDeque<String>,
+    /// Time donations already added / removed today (daily caps). Reset with the budget.
+    pub donation_added_ms: i64,
+    pub donation_removed_ms: i64,
+    /// Every donation id ever applied (from the ledger): a retry is never applied twice, even
+    /// after a server restart, which the short `seen_ids` window cannot guarantee.
+    pub donation_ids: HashSet<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

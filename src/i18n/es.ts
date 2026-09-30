@@ -176,6 +176,8 @@ export const es = {
     SESSION_EXHAUSTED: '{racer} se quedó sin tiempo',
     DAILY_RESET: 'Reinicio diario completado para {racer}',
     GAME_FINISHED: '{racer} completó Ocarina of Time',
+    TIME_ADDED: '{racer} ganó {subject} de tiempo por donaciones',
+    TIME_REMOVED: '{racer} perdió {subject} de tiempo por donaciones',
     terminal: 'FEED DE EVENTOS EN VIVO',
     waiting: 'esperando eventos',
     system: 'SISTEMA',

@@ -2,7 +2,7 @@
 //! persistence ops, downstream ingest commands) out. No I/O and no clock reads, so every rule
 //! is unit-testable with a fixed `now`.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::catalog::{CatalogItem, CatalogObjective};
 use crate::clock::{Checkpoint, format_hms, next_reset_utc, parse_local_time};
-use crate::db::{IdentityRow, PersistOp, RacerStateRow};
+use crate::db::{IdentityRow, PersistOp, RacerStateRow, TimeDonationRow};
 use crate::domain::*;
 use crate::state::*;
 
@@ -80,6 +80,85 @@ pub enum IngestMsg {
         live: bool,
         viewers: Option<i64>,
     },
+    /// A viewer donation turned into time by HiveShock with the streamer's own rate: positive
+    /// `deltaSeconds` adds, negative removes. Needs an `id`; the organizer's policy caps it.
+    TimeDonation {
+        delta_seconds: i64,
+        source: DonationSource,
+    },
+}
+
+/// What paid for a time donation. Kept in the ledger; only the amount reaches the public feed.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DonationSource {
+    pub platform: Platform,
+    pub currency: DonationCurrency,
+    /// Total diamonds or bits of the donation (a whole TikTok combo counts once).
+    pub amount: i64,
+    pub gift: Option<String>,
+    pub gift_count: Option<i64>,
+    pub viewer: Option<String>,
+}
+
+impl DonationSource {
+    const MAX_AMOUNT: i64 = 100_000_000;
+
+    fn sanitized(mut self) -> Result<Self, IngestError> {
+        let expected = match self.platform {
+            Platform::Tiktok => DonationCurrency::Diamonds,
+            Platform::Twitch => DonationCurrency::Bits,
+            Platform::Youtube => {
+                return Err(IngestError::Invalid(
+                    "youtube donations are not supported yet".into(),
+                ));
+            }
+        };
+        if self.currency != expected {
+            return Err(IngestError::Invalid(format!(
+                "{} donations are paid in {}",
+                self.platform.as_str(),
+                expected.as_str()
+            )));
+        }
+        if !(1..=Self::MAX_AMOUNT).contains(&self.amount) {
+            return Err(IngestError::Invalid(
+                "amount must be between 1 and 100000000".into(),
+            ));
+        }
+        self.gift = clean_text(self.gift);
+        self.viewer = clean_text(self.viewer);
+        self.gift_count = self.gift_count.map(|c| c.clamp(1, 100_000));
+        Ok(self)
+    }
+
+    /// "100 BITS", "ROSE X5 · 5 DIAMONDS".
+    fn summary(&self) -> String {
+        let paid = format!("{} {}", self.amount, self.currency.as_str()).to_uppercase();
+        match (&self.gift, self.gift_count) {
+            (Some(g), Some(n)) if n > 1 => format!("{} X{n} · {paid}", g.to_uppercase()),
+            (Some(g), _) => format!("{} · {paid}", g.to_uppercase()),
+            _ => paid,
+        }
+    }
+}
+
+/// Trimmed, at most 64 characters, `None` if empty.
+fn clean_text(text: Option<String>) -> Option<String> {
+    let t = text?.trim().chars().take(64).collect::<String>();
+    (!t.is_empty()).then_some(t)
+}
+
+/// Answer to a `TIME_DONATION`: what was asked, what the clock really got and why it differs.
+#[derive(Serialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeApplied {
+    pub requested_seconds: i64,
+    pub applied_seconds: i64,
+    /// `per_donation`, `daily_limit`, `clock_max` or `clock_zero` when less than asked was applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limited_by: Option<&'static str>,
+    pub clock: ClockState,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -94,6 +173,7 @@ pub struct IngestEnvelope {
 pub enum Reply {
     Ack,
     Clock(ClockState),
+    TimeApplied(Box<TimeApplied>),
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]
@@ -110,6 +190,8 @@ pub enum IngestError {
     RequirementsNotMet,
     #[error("daily time is exhausted")]
     Exhausted,
+    #[error("not allowed: {0}")]
+    NotAllowed(&'static str),
 }
 
 impl IngestError {
@@ -121,6 +203,7 @@ impl IngestError {
             IngestError::Invalid(_) => "invalid",
             IngestError::RequirementsNotMet => "requirements_not_met",
             IngestError::Exhausted => "exhausted",
+            IngestError::NotAllowed(_) => "not_allowed",
         }
     }
 }
@@ -152,6 +235,8 @@ pub struct EventPatch {
     pub daily_reset_local_time: Option<String>,
     pub win_condition: Option<String>,
     pub required_objective_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub donation_time: Option<DonationTimePolicy>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -284,6 +369,8 @@ impl RaceState {
             final_time_seconds: r.racer.final_time_seconds,
             last_heartbeat_at: r.last_heartbeat,
             stream: r.racer.stream.clone().unwrap_or_default(),
+            donation_added_ms: r.donation_added_ms,
+            donation_removed_ms: r.donation_removed_ms,
         }
     }
 
@@ -401,6 +488,7 @@ impl RaceState {
             }
         }
 
+        let client_id = env.id.clone();
         let live_event = self.event_status(now) == EventStatus::Live;
         let status = self.racers[i].racer.status;
         let name = self.racers[i].racer.display_name.clone();
@@ -675,10 +763,168 @@ impl RaceState {
                 let n = i64::from(count.unwrap_or(1).min(1000));
                 self.bump(&mut fx, |s| s.chat_events += n);
             }
+            IngestMsg::TimeDonation {
+                delta_seconds,
+                source,
+            } => {
+                let client_id = client_id.ok_or_else(|| {
+                    IngestError::Invalid(
+                        "TIME_DONATION needs an id (it must not apply twice)".into(),
+                    )
+                })?;
+                if !live_event {
+                    return Err(IngestError::EventNotLive);
+                }
+                reply =
+                    self.apply_time_donation(i, &client_id, delta_seconds, source, now, &mut fx)?;
+            }
         }
 
         self.flush(&mut fx);
         Ok((fx, reply))
+    }
+
+    /// Donation time within the organizer's policy. Idempotent by client id (ledger-backed).
+    fn apply_time_donation(
+        &mut self,
+        i: usize,
+        client_id: &str,
+        delta_seconds: i64,
+        source: DonationSource,
+        now: DateTime<Utc>,
+        fx: &mut Fx,
+    ) -> Result<Reply, IngestError> {
+        if self.racers[i].donation_ids.contains(client_id) {
+            return Ok(Reply::Ack);
+        }
+        if delta_seconds == 0 || delta_seconds.abs() > DonationTimePolicy::MAX_SECONDS {
+            return Err(IngestError::Invalid(
+                "deltaSeconds must be non-zero and at most 172800 either way".into(),
+            ));
+        }
+        let source = source.sanitized()?;
+        if self.racers[i].racer.status == RacerStatus::Finished {
+            return Err(IngestError::OutOfSequence("racer already finished"));
+        }
+        let policy = self.event.donation_time.clone();
+        let adding = delta_seconds > 0;
+        if !policy.enabled {
+            return Err(IngestError::NotAllowed(
+                "the organizer turned donation time off",
+            ));
+        }
+        if adding && !policy.allow_add {
+            return Err(IngestError::NotAllowed(
+                "donations may not add time in this event",
+            ));
+        }
+        if !adding && !policy.allow_remove {
+            return Err(IngestError::NotAllowed(
+                "donations may not remove time in this event",
+            ));
+        }
+
+        // Caps, in order: one donation, what is left of today's allowance, then the clock itself.
+        let mut limited_by = None;
+        let mut want = (delta_seconds * 1000).abs();
+        let per_donation = policy.max_seconds_per_donation * 1000;
+        if want > per_donation {
+            want = per_donation;
+            limited_by = Some("per_donation");
+        }
+        let r = &self.racers[i];
+        let left_today = if adding {
+            policy.max_added_seconds_per_day * 1000 - r.donation_added_ms
+        } else {
+            policy.max_removed_seconds_per_day * 1000 - r.donation_removed_ms
+        }
+        .max(0);
+        if want > left_today {
+            want = left_today;
+            limited_by = Some("daily_limit");
+        }
+
+        self.freeze(i, now);
+        let before = self.racers[i].checkpoint.remaining_ms;
+        // Same ceiling as an organizer adjustment: two daily budgets.
+        let ceiling = (self.budget_ms() * 2).max(before);
+        let target = if adding { before + want } else { before - want };
+        let after = target.clamp(0, ceiling);
+        if after != target && limited_by.is_none() {
+            limited_by = Some(if adding { "clock_max" } else { "clock_zero" });
+        }
+        let applied = after - before;
+        {
+            let r = &mut self.racers[i];
+            r.checkpoint.remaining_ms = after;
+            if applied > 0 {
+                r.donation_added_ms += applied;
+            } else {
+                r.donation_removed_ms -= applied;
+            }
+            r.donation_ids.insert(client_id.to_string());
+        }
+        fx.touch(i);
+        fx.ops
+            .push(PersistOp::TimeDonation(Box::new(TimeDonationRow {
+                ts: now,
+                racer_id: self.racers[i].racer.id.clone(),
+                client_id: client_id.to_string(),
+                platform: source.platform,
+                currency: source.currency,
+                amount: source.amount,
+                gift: source.gift.clone(),
+                gift_count: source.gift_count,
+                viewer: source.viewer.clone(),
+                requested_ms: delta_seconds * 1000,
+                applied_ms: applied,
+                limited_by: limited_by.map(str::to_string),
+            })));
+
+        let status = self.racers[i].racer.status;
+        if after == 0 && matches!(status, RacerStatus::Live | RacerStatus::Paused) {
+            // Donations took the last second: same as running out of time.
+            self.exhaust(i, now, fx);
+        } else if status == RacerStatus::Exhausted && after > 0 {
+            let next = if self.racers[i].ingest.is_some() {
+                RacerStatus::Online
+            } else {
+                RacerStatus::Offline
+            };
+            self.set_status(i, next, now, fx);
+        } else if applied != 0 {
+            fx.msgs.push(WsMessage::ClockSync {
+                clock: self.clock(i, now),
+            });
+        }
+
+        let applied_seconds = (applied as f64 / 1000.0).round() as i64;
+        if applied_seconds != 0 {
+            let name = self.racers[i].racer.display_name.clone();
+            let hms = format_hms(applied_seconds.abs());
+            let (code, verb, sign) = if applied > 0 {
+                ("TIME_ADDED", "gained", '+')
+            } else {
+                ("TIME_REMOVED", "lost", '-')
+            };
+            self.note(
+                fx,
+                now,
+                ActivityKind::Time,
+                Some(i),
+                code,
+                format!("{name} {verb} {hms} from donations"),
+                Some(format!("{sign}{hms} · {}", source.summary())),
+                Some(hms),
+            );
+        }
+
+        Ok(Reply::TimeApplied(Box::new(TimeApplied {
+            requested_seconds: delta_seconds,
+            applied_seconds,
+            limited_by,
+            clock: self.clock(i, now),
+        })))
     }
 
     fn sanitize_progress(
@@ -806,6 +1052,8 @@ impl RaceState {
                 at: now,
             };
             r.reset_at = next;
+            r.donation_added_ms = 0;
+            r.donation_removed_ms = 0;
         }
         if self.racers[i].racer.status == RacerStatus::Exhausted {
             let next_status = if self.racers[i].ingest.is_some() {
@@ -1136,6 +1384,10 @@ impl RaceState {
             }
             self.event.rules.required_objective_ids = ids.clone();
         }
+        if let Some(policy) = &p.donation_time {
+            policy.validate()?;
+            self.event.donation_time = policy.clone();
+        }
         if let Some(n) = p.name {
             self.event.name = n;
         }
@@ -1201,6 +1453,9 @@ impl RaceState {
             last_heartbeat: None,
             ingest: None,
             seen_ids: VecDeque::new(),
+            donation_added_ms: 0,
+            donation_removed_ms: 0,
+            donation_ids: HashSet::new(),
         });
         let i = self.racers.len() - 1;
         let mut fx = Fx::default();

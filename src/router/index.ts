@@ -59,6 +59,11 @@ export const router = createRouter({
         },
         { path: 'audit', name: 'admin-audit', component: () => import('@/admin/pages/Audit.vue') },
         {
+          path: 'donations',
+          name: 'admin-donations',
+          component: () => import('@/admin/pages/Donations.vue'),
+        },
+        {
           path: 'accounts',
           name: 'admin-accounts',
           component: () => import('@/admin/pages/Accounts.vue'),

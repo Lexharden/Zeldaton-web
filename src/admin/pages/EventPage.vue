@@ -4,7 +4,7 @@ import AgeBadge from '@/components/common/AgeBadge.vue'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import { AGE_ORDER } from '@/utils/catalog'
 import type { CatalogAge, CatalogObjective } from '@/types/catalog'
-import type { EventInfo } from '@/types/event'
+import type { DonationTimePolicy, EventInfo } from '@/types/event'
 import { adminApi } from '../api/AdminApi'
 import { isoToLocalInput, localInputToIso, shortDuration } from '../format'
 import { messageOf, useToasts } from '../composables/useToasts'
@@ -15,6 +15,54 @@ const toasts = useToasts()
 const event = ref<EventInfo | null>(null)
 const objectives = ref<CatalogObjective[]>([])
 const busy = ref(false)
+
+/** Same defaults as the backend (DonationTimePolicy::default). */
+const DEFAULT_DONATIONS: DonationTimePolicy = {
+  enabled: true,
+  allowAdd: true,
+  allowRemove: true,
+  maxSecondsPerDonation: 3600,
+  maxAddedSecondsPerDay: 4 * 3600,
+  maxRemovedSecondsPerDay: 4 * 3600,
+}
+/** The form edits minutes; the API speaks seconds. */
+const donations = ref({
+  enabled: true,
+  allowAdd: true,
+  allowRemove: true,
+  perDonationMin: 60,
+  addedPerDayMin: 240,
+  removedPerDayMin: 240,
+})
+function loadDonations(p: DonationTimePolicy = DEFAULT_DONATIONS) {
+  donations.value = {
+    enabled: p.enabled,
+    allowAdd: p.allowAdd,
+    allowRemove: p.allowRemove,
+    perDonationMin: Math.round(p.maxSecondsPerDonation / 60),
+    addedPerDayMin: Math.round(p.maxAddedSecondsPerDay / 60),
+    removedPerDayMin: Math.round(p.maxRemovedSecondsPerDay / 60),
+  }
+}
+const donationPolicy = computed<DonationTimePolicy>(() => ({
+  enabled: donations.value.enabled,
+  allowAdd: donations.value.allowAdd,
+  allowRemove: donations.value.allowRemove,
+  maxSecondsPerDonation: Math.round(donations.value.perDonationMin * 60),
+  maxAddedSecondsPerDay: Math.round(donations.value.addedPerDayMin * 60),
+  maxRemovedSecondsPerDay: Math.round(donations.value.removedPerDayMin * 60),
+}))
+const donationsError = computed(() => {
+  const p = donationPolicy.value
+  if (!(p.maxSecondsPerDonation >= 60 && p.maxSecondsPerDonation <= 172800))
+    return 'El máximo por donación va de 1 minuto a 48 horas.'
+  if (
+    !(p.maxAddedSecondsPerDay >= 0 && p.maxAddedSecondsPerDay <= 172800) ||
+    !(p.maxRemovedSecondsPerDay >= 0 && p.maxRemovedSecondsPerDay <= 172800)
+  )
+    return 'Los topes diarios van de 0 a 48 horas.'
+  return ''
+})
 
 const form = ref({
   name: '',
@@ -43,6 +91,7 @@ async function load() {
       winCondition: e.rules.winCondition,
       required: [...e.rules.requiredObjectiveIds],
     }
+    loadDonations(e.donationTime)
   } catch (e) {
     toasts.error(messageOf(e))
   }
@@ -64,6 +113,7 @@ const sections = computed(() =>
 const valid = computed(
   () =>
     !budgetError.value &&
+    !donationsError.value &&
     form.value.name.trim() &&
     form.value.required.length > 0 &&
     /^\d{2}:\d{2}$/.test(form.value.reset),
@@ -80,6 +130,7 @@ async function save() {
       dailyResetLocalTime: form.value.reset,
       winCondition: form.value.winCondition.trim(),
       requiredObjectiveIds: form.value.required,
+      donationTime: donationPolicy.value,
     })
     toasts.success('Evento guardado.')
   } catch (e) {
@@ -159,6 +210,81 @@ async function save() {
             Cada corredor juega hasta {{ shortDuration(budgetSeconds) }} al día; se reinicia a las
             {{ form.reset }} de su zona horaria.
           </p>
+        </div>
+      </section>
+
+      <section class="panel xl:col-span-2">
+        <div class="space-y-4 p-5">
+          <h2 class="hud-label">TIEMPO POR DONACIONES</h2>
+          <p class="a-hint">
+            Cada streamer decide en HiveShock cuántos segundos vale cada diamante de TikTok o bit de
+            Twitch y si suman o restan tiempo. Aquí pones los límites: el servidor nunca aplica más.
+          </p>
+          <div class="flex flex-wrap gap-6 text-sm">
+            <label class="flex items-center gap-2">
+              <input v-model="donations.enabled" type="checkbox" />
+              <span class="text-white">Permitir tiempo por donaciones</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input v-model="donations.allowAdd" type="checkbox" :disabled="!donations.enabled" />
+              <span>Pueden sumar tiempo</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input
+                v-model="donations.allowRemove"
+                type="checkbox"
+                :disabled="!donations.enabled"
+              />
+              <span>Pueden restar tiempo</span>
+            </label>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label class="a-label" for="don-per">Máximo por donación (min)</label>
+              <input
+                id="don-per"
+                v-model.number="donations.perDonationMin"
+                type="number"
+                min="1"
+                max="2880"
+                class="a-input"
+                :disabled="!donations.enabled"
+              />
+            </div>
+            <div>
+              <label class="a-label" for="don-add">Máximo que suman al día (min)</label>
+              <input
+                id="don-add"
+                v-model.number="donations.addedPerDayMin"
+                type="number"
+                min="0"
+                max="2880"
+                class="a-input"
+                :disabled="!donations.enabled || !donations.allowAdd"
+              />
+            </div>
+            <div>
+              <label class="a-label" for="don-remove">Máximo que restan al día (min)</label>
+              <input
+                id="don-remove"
+                v-model.number="donations.removedPerDayMin"
+                type="number"
+                min="0"
+                max="2880"
+                class="a-input"
+                :disabled="!donations.enabled || !donations.allowRemove"
+              />
+            </div>
+          </div>
+          <p v-if="donationsError" class="a-error">{{ donationsError }}</p>
+          <p v-else-if="donations.enabled" class="a-hint">
+            Una donación cambia como mucho
+            {{ shortDuration(donationPolicy.maxSecondsPerDonation) }}; al día, por corredor, suman
+            hasta {{ shortDuration(donationPolicy.maxAddedSecondsPerDay) }} y restan hasta
+            {{ shortDuration(donationPolicy.maxRemovedSecondsPerDay) }}. Los topes diarios se
+            reinician con el tiempo del día. Lo aplicado queda en «Donaciones».
+          </p>
+          <p v-else class="a-hint">Las donaciones no cambian el tiempo de nadie.</p>
         </div>
       </section>
 

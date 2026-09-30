@@ -19,6 +19,8 @@ function describe(a: ActivityItem): string {
 }
 function subjectLabel(a: ActivityItem): string {
   if (!a.subject) return ''
+  // Donation time: the subject is already a duration ("00:01:30").
+  if (a.kind === 'time') return a.subject
   const ns = a.code === 'ITEM_ACQUIRED' ? 'items' : a.code === 'BOSS_DEFEATED' ? 'bosses' : 'areas'
   return tx(ns, a.subject)
 }
@@ -29,6 +31,7 @@ const dot: Record<string, string> = {
   status: 'bg-warning',
   reset: 'bg-success',
   finish: 'bg-accent',
+  time: 'bg-success',
   system: 'bg-primary',
 }
 </script>

@@ -636,3 +636,267 @@ fn stats_carry_the_current_link_age() {
     );
     assert_eq!(stats.hearts, Some(3.0));
 }
+
+// ---- time donations -------------------------------------------------------------------------------
+
+fn bits(amount: i64) -> DonationSource {
+    DonationSource {
+        platform: Platform::Twitch,
+        currency: DonationCurrency::Bits,
+        amount,
+        gift: None,
+        gift_count: None,
+        viewer: Some("viewer".into()),
+    }
+}
+
+fn diamonds(gift: &str, count: i64, amount: i64) -> DonationSource {
+    DonationSource {
+        platform: Platform::Tiktok,
+        currency: DonationCurrency::Diamonds,
+        amount,
+        gift: Some(gift.into()),
+        gift_count: Some(count),
+        viewer: None,
+    }
+}
+
+fn donate(
+    s: &mut RaceState,
+    racer: &str,
+    id: &str,
+    delta_seconds: i64,
+    source: DonationSource,
+    now: DateTime<Utc>,
+) -> Result<(Fx, Reply), IngestError> {
+    s.apply_ingest(
+        racer,
+        IngestEnvelope {
+            id: Some(id.into()),
+            msg: IngestMsg::TimeDonation {
+                delta_seconds,
+                source,
+            },
+        },
+        now,
+    )
+}
+
+fn applied(reply: &Reply) -> &TimeApplied {
+    match reply {
+        Reply::TimeApplied(t) => t,
+        other => panic!("expected TIME_APPLIED, got {other:?}"),
+    }
+}
+
+fn ledger(fx: &Fx) -> Vec<&zeldathon_server::db::TimeDonationRow> {
+    fx.ops
+        .iter()
+        .filter_map(|op| match op {
+            zeldathon_server::db::PersistOp::TimeDonation(row) => Some(row.as_ref()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn donations_add_and_remove_time_and_are_recorded() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let i = s.idx("ralbat").unwrap();
+
+    let (fx, reply) = donate(&mut s, "ralbat", "d1", 90, bits(150), t0()).unwrap();
+    let t = applied(&reply);
+    assert_eq!(
+        (t.requested_seconds, t.applied_seconds, t.limited_by),
+        (90, 90, None)
+    );
+    assert_eq!(t.clock.remaining_ms, 14_400_000 + 90_000);
+    let row = ledger(&fx)[0];
+    assert_eq!(
+        (row.amount, row.applied_ms, row.client_id.as_str()),
+        (150, 90_000, "d1")
+    );
+    let k = kinds(&fx);
+    assert!(k.contains(&"CLOCK_SYNC".to_string()) && k.contains(&"LIVE_ACTIVITY".to_string()));
+    let feed = &s.activity[0];
+    assert_eq!(
+        (feed.code.as_str(), feed.kind),
+        ("TIME_ADDED", ActivityKind::Time)
+    );
+    assert_eq!(feed.detail.as_deref(), Some("+00:01:30 · 150 BITS"));
+
+    let (_, reply) = donate(&mut s, "ralbat", "d2", -30, diamonds("Rose", 5, 5), t0()).unwrap();
+    assert_eq!(applied(&reply).applied_seconds, -30);
+    assert_eq!(s.activity[0].code, "TIME_REMOVED");
+    assert_eq!(
+        s.activity[0].detail.as_deref(),
+        Some("-00:00:30 · ROSE X5 · 5 DIAMONDS")
+    );
+    assert_eq!(s.clock(i, t0()).remaining_ms, 14_400_000 + 60_000);
+    assert_eq!(
+        (
+            s.racers[i].donation_added_ms,
+            s.racers[i].donation_removed_ms
+        ),
+        (90_000, 30_000)
+    );
+}
+
+#[test]
+fn a_retried_donation_is_applied_once_even_after_the_recent_ids_are_gone() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    donate(&mut s, "ralbat", "same", 60, bits(100), t0()).unwrap();
+    let i = s.idx("ralbat").unwrap();
+    // A restart empties the short window of recent ids; the ledger ids stay.
+    s.racers[i].seen_ids.clear();
+    let (fx, reply) = donate(&mut s, "ralbat", "same", 60, bits(100), t0()).unwrap();
+    assert_eq!(reply, Reply::Ack);
+    assert!(ledger(&fx).is_empty());
+    assert_eq!(s.clock(i, t0()).remaining_ms, 14_400_000 + 60_000);
+}
+
+#[test]
+fn organizer_policy_turns_donations_off_or_limits_them() {
+    let mut s = state(t0());
+    start(&mut s, "cuaco", t0());
+
+    s.event.donation_time.enabled = false;
+    let err = donate(&mut s, "cuaco", "a", 60, bits(100), t0()).unwrap_err();
+    assert_eq!(err.code(), "not_allowed");
+
+    s.event.donation_time = DonationTimePolicy {
+        allow_remove: false,
+        max_seconds_per_donation: 120,
+        max_added_seconds_per_day: 150,
+        ..DonationTimePolicy::default()
+    };
+    let err = donate(&mut s, "cuaco", "b", -60, bits(100), t0()).unwrap_err();
+    assert_eq!(err.code(), "not_allowed");
+
+    let (_, r) = donate(&mut s, "cuaco", "c", 600, bits(1000), t0()).unwrap();
+    assert_eq!(
+        (applied(&r).applied_seconds, applied(&r).limited_by),
+        (120, Some("per_donation"))
+    );
+    let (_, r) = donate(&mut s, "cuaco", "d", 100, bits(100), t0()).unwrap();
+    assert_eq!(
+        (applied(&r).applied_seconds, applied(&r).limited_by),
+        (30, Some("daily_limit"))
+    );
+    let activity_before = s.activity.len();
+    let (fx, r) = donate(&mut s, "cuaco", "e", 100, bits(100), t0()).unwrap();
+    assert_eq!(
+        (applied(&r).applied_seconds, applied(&r).limited_by),
+        (0, Some("daily_limit"))
+    );
+    // Nothing changed on the clock: recorded in the ledger, nothing in the public feed.
+    assert_eq!(ledger(&fx).len(), 1);
+    assert_eq!(s.activity.len(), activity_before);
+}
+
+#[test]
+fn donations_can_run_the_clock_out_and_bring_it_back() {
+    let mut s = state(t0());
+    start(&mut s, "cuaco", t0());
+    let i = s.idx("cuaco").unwrap();
+    s.event.donation_time.max_seconds_per_donation = DonationTimePolicy::MAX_SECONDS;
+    s.event.donation_time.max_removed_seconds_per_day = DonationTimePolicy::MAX_SECONDS;
+
+    let (fx, r) = donate(&mut s, "cuaco", "all", -20_000, bits(99_999), t0()).unwrap();
+    assert_eq!(applied(&r).applied_seconds, -14_400);
+    assert_eq!(applied(&r).limited_by, Some("clock_zero"));
+    assert_eq!(s.view(i, t0()).status, RacerStatus::Exhausted);
+    assert!(
+        fx.down
+            .iter()
+            .any(|(id, d)| id == "cuaco" && *d == zeldathon_server::state::IngestDown::ForceClose)
+    );
+
+    donate(&mut s, "cuaco", "back", 300, bits(500), t0()).unwrap();
+    let v = s.view(i, t0());
+    assert_eq!(v.remaining_seconds, 300);
+    assert_ne!(v.status, RacerStatus::Exhausted);
+}
+
+#[test]
+fn donations_are_validated() {
+    let mut s = state(t0());
+    start(&mut s, "cuaco", t0());
+    let no_id = s.apply_ingest(
+        "cuaco",
+        env(IngestMsg::TimeDonation {
+            delta_seconds: 60,
+            source: bits(100),
+        }),
+        t0(),
+    );
+    assert_eq!(no_id.unwrap_err().code(), "invalid");
+    let mut wrong = bits(100);
+    wrong.currency = DonationCurrency::Diamonds;
+    assert_eq!(
+        donate(&mut s, "cuaco", "w", 60, wrong, t0())
+            .unwrap_err()
+            .code(),
+        "invalid"
+    );
+    assert_eq!(
+        donate(&mut s, "cuaco", "z", 0, bits(100), t0())
+            .unwrap_err()
+            .code(),
+        "invalid"
+    );
+    assert_eq!(
+        donate(&mut s, "cuaco", "n", 60, bits(0), t0())
+            .unwrap_err()
+            .code(),
+        "invalid"
+    );
+
+    let before = Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
+    let mut early = state(before);
+    assert_eq!(
+        donate(&mut early, "cuaco", "x", 60, bits(100), before).unwrap_err(),
+        IngestError::EventNotLive
+    );
+}
+
+#[test]
+fn the_daily_reset_restores_the_donation_allowance() {
+    let mut s = state(t0());
+    start(&mut s, "cuaco", t0());
+    s.event.donation_time.max_added_seconds_per_day = 60;
+    donate(&mut s, "cuaco", "a", 60, bits(100), t0()).unwrap();
+    let reset = Utc.with_ymd_and_hms(2026, 10, 8, 12, 0, 1).unwrap();
+    s.tick(reset, i64::MAX);
+    let (_, r) = donate(&mut s, "cuaco", "b", 60, bits(100), reset).unwrap();
+    assert_eq!(applied(&r).applied_seconds, 60);
+}
+
+#[test]
+fn the_donation_policy_is_edited_with_the_event_and_validated() {
+    let mut s = state(t0());
+    let policy = DonationTimePolicy {
+        allow_add: false,
+        max_seconds_per_donation: 300,
+        ..DonationTimePolicy::default()
+    };
+    s.update_event(EventPatch {
+        donation_time: Some(policy.clone()),
+        ..EventPatch::default()
+    })
+    .unwrap();
+    assert_eq!(s.event.donation_time, policy);
+    let bad = DonationTimePolicy {
+        max_seconds_per_donation: 0,
+        ..DonationTimePolicy::default()
+    };
+    assert!(
+        s.update_event(EventPatch {
+            donation_time: Some(bad),
+            ..EventPatch::default()
+        })
+        .is_err()
+    );
+}

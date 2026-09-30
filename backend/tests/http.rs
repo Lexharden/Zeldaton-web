@@ -1243,3 +1243,90 @@ async fn the_catalog_is_managed_through_the_api_and_clients_are_told() {
         StatusCode::NO_CONTENT
     );
 }
+
+#[tokio::test]
+async fn time_donations_flow_from_hiveshock_to_the_ledger_and_survive_a_restart() {
+    let h = harness().await;
+    make_event_live(&h).await;
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    let before = wait_for(&mut hs, "CLOCK").await["clock"]["remainingMs"]
+        .as_i64()
+        .unwrap();
+
+    let donation = json!({
+        "type": "TIME_DONATION",
+        "id": "don-1",
+        "deltaSeconds": 120,
+        "source": { "platform": "twitch", "currency": "bits", "amount": 200, "viewer": "fan" }
+    });
+    send(&mut hs, donation.clone()).await;
+    let applied = wait_for(&mut hs, "TIME_APPLIED").await;
+    assert_eq!(applied["id"], "don-1");
+    assert_eq!(applied["requestedSeconds"], 120);
+    assert_eq!(applied["appliedSeconds"], 120);
+    assert!(applied.get("limitedBy").is_none());
+    assert_eq!(
+        applied["clock"]["remainingMs"].as_i64().unwrap(),
+        before + 120_000
+    );
+
+    // The same id again (a retry after a lost ACK) is acknowledged, not applied.
+    send(&mut hs, donation).await;
+    assert_eq!(wait_for(&mut hs, "ACK").await["id"], "don-1");
+
+    // The organizer turns donations off: HiveShock is told why.
+    let (s, event) = call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "donationTime": { "enabled": false, "allowAdd": true, "allowRemove": true,
+            "maxSecondsPerDonation": 600, "maxAddedSecondsPerDay": 3600, "maxRemovedSecondsPerDay": 3600 } })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(event["donationTime"]["enabled"], false);
+    let (_, public) = call(&h, "GET", "/api/event", None, None).await;
+    assert_eq!(public["donationTime"]["maxSecondsPerDonation"], 600);
+    send(
+        &mut hs,
+        json!({ "type": "TIME_DONATION", "id": "don-2", "deltaSeconds": -60,
+                "source": { "platform": "tiktok", "currency": "diamonds", "amount": 30, "gift": "Rose", "giftCount": 30 } }),
+    )
+    .await;
+    let err = wait_for(&mut hs, "ERROR").await;
+    assert_eq!(
+        (err["id"].as_str(), err["code"].as_str()),
+        (Some("don-2"), Some("not_allowed"))
+    );
+
+    // Let the single writer catch up, then read what the organizer panel shows.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let (s, panel) = call(&h, "GET", "/api/admin/donations", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let recent = panel["recent"].as_array().unwrap();
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0]["racerId"], "cuaco");
+    assert_eq!(recent[0]["viewer"], "fan");
+    assert_eq!(recent[0]["appliedSeconds"], 120);
+    let totals = panel["totals"].as_array().unwrap();
+    assert_eq!(totals[0]["addedSeconds"], 120);
+    let today = panel["today"].as_array().unwrap();
+    assert!(
+        today
+            .iter()
+            .any(|t| t["racerId"] == "cuaco" && t["addedSeconds"] == 120)
+    );
+    let (s, _) = call(&h, "GET", "/api/admin/donations", None, None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    // After a restart the ledger still blocks the retry and the daily counters are kept.
+    let reloaded = db::load(&h.pool).await.unwrap().unwrap();
+    let i = reloaded.idx("cuaco").unwrap();
+    assert!(reloaded.racers[i].donation_ids.contains("don-1"));
+    assert_eq!(reloaded.racers[i].donation_added_ms, 120_000);
+    assert!(!reloaded.event.donation_time.enabled);
+}

@@ -131,6 +131,79 @@ pub struct EventInfo {
     pub daily_budget_seconds: i64,
     pub daily_reset_local_time: String,
     pub rules: EventRules,
+    /// How much time viewer donations may add or remove (the streamer sets the rate in HiveShock).
+    #[serde(default)]
+    pub donation_time: DonationTimePolicy,
+}
+
+/// Organizer limits for time from donations. HiveShock converts TikTok diamonds / Twitch bits into
+/// seconds with the streamer's own rate; the server applies them only within these limits.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DonationTimePolicy {
+    pub enabled: bool,
+    /// Donations may add time.
+    pub allow_add: bool,
+    /// Donations may take time away.
+    pub allow_remove: bool,
+    /// Largest change a single donation can make (seconds).
+    pub max_seconds_per_donation: i64,
+    /// Most time donations can add to one racer per day (seconds; resets with the daily budget).
+    pub max_added_seconds_per_day: i64,
+    /// Most time donations can remove from one racer per day (seconds).
+    pub max_removed_seconds_per_day: i64,
+}
+
+impl Default for DonationTimePolicy {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            allow_add: true,
+            allow_remove: true,
+            max_seconds_per_donation: 3600,
+            max_added_seconds_per_day: 4 * 3600,
+            max_removed_seconds_per_day: 4 * 3600,
+        }
+    }
+}
+
+impl DonationTimePolicy {
+    /// Upper bound for every limit: two days of play.
+    pub const MAX_SECONDS: i64 = 2 * 86_400;
+
+    pub fn validate(&self) -> Result<(), String> {
+        if !(1..=Self::MAX_SECONDS).contains(&self.max_seconds_per_donation) {
+            return Err("maxSecondsPerDonation must be between 1 and 172800".into());
+        }
+        for (name, v) in [
+            ("maxAddedSecondsPerDay", self.max_added_seconds_per_day),
+            ("maxRemovedSecondsPerDay", self.max_removed_seconds_per_day),
+        ] {
+            if !(0..=Self::MAX_SECONDS).contains(&v) {
+                return Err(format!("{name} must be between 0 and 172800"));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// What a donation was paid in.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum DonationCurrency {
+    /// TikTok gifts.
+    Diamonds,
+    /// Twitch cheers.
+    Bits,
+}
+
+impl DonationCurrency {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DonationCurrency::Diamonds => "diamonds",
+            DonationCurrency::Bits => "bits",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -271,6 +344,8 @@ pub enum ActivityKind {
     Status,
     Reset,
     Finish,
+    /// Time added or removed by viewer donations.
+    Time,
     System,
 }
 
@@ -283,6 +358,7 @@ impl ActivityKind {
             ActivityKind::Status => "status",
             ActivityKind::Reset => "reset",
             ActivityKind::Finish => "finish",
+            ActivityKind::Time => "time",
             ActivityKind::System => "system",
         }
     }
@@ -295,6 +371,7 @@ impl ActivityKind {
             "status" => ActivityKind::Status,
             "reset" => ActivityKind::Reset,
             "finish" => ActivityKind::Finish,
+            "time" => ActivityKind::Time,
             _ => ActivityKind::System,
         }
     }

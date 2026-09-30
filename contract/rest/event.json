@@ -1,6 +1,14 @@
 {
   "dailyBudgetSeconds": 14400,
   "dailyResetLocalTime": "06:00",
+  "donationTime": {
+    "allowAdd": true,
+    "allowRemove": true,
+    "enabled": true,
+    "maxAddedSecondsPerDay": 14400,
+    "maxRemovedSecondsPerDay": 14400,
+    "maxSecondsPerDonation": 3600
+  },
   "edition": "2026",
   "game": "Ocarina of Time",
   "id": "zeldathon-2026",

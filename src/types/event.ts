@@ -22,4 +22,20 @@ export interface EventInfo {
   /** Wall clock time (HH:MM) at which each racer's budget resets, in the racer's own timezone. */
   dailyResetLocalTime: string
   rules: EventRules
+  /** Organizer limits for time from viewer donations (absent on older backends). */
+  donationTime?: DonationTimePolicy
+}
+
+/**
+ * How much time TikTok gifts / Twitch bits may add or remove. The streamer sets the rate in
+ * HiveShock; the backend applies it only within these limits (all values in seconds).
+ */
+export interface DonationTimePolicy {
+  enabled: boolean
+  allowAdd: boolean
+  allowRemove: boolean
+  maxSecondsPerDonation: number
+  /** Per racer and day; resets with the daily budget. */
+  maxAddedSecondsPerDay: number
+  maxRemovedSecondsPerDay: number
 }

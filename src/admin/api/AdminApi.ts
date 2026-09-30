@@ -5,6 +5,7 @@ import type { Racer } from '@/types/racer'
 import type {
   AdminCatalog,
   AuditRow,
+  DonationsResponse,
   EventAction,
   EventPatchInput,
   LoginResponse,
@@ -152,6 +153,13 @@ export class AdminApi {
 
   // ---- audit
   audit = (limit = 100) => this.request<AuditRow[]>('GET', `/audit?limit=${limit}`)
+
+  // ---- time donations
+  donations = (limit = 200, racer?: string) =>
+    this.request<DonationsResponse>(
+      'GET',
+      `/donations?limit=${limit}${racer ? `&racer=${encodeURIComponent(racer)}` : ''}`,
+    )
 }
 
 /** One client for the whole panel. */

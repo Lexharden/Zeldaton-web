@@ -18,7 +18,16 @@ export interface StreamInfo extends RacerStream {
   racerId: string
 }
 
-export type ActivityKind = 'area' | 'item' | 'boss' | 'status' | 'reset' | 'finish' | 'system'
+export type ActivityKind =
+  | 'area'
+  | 'item'
+  | 'boss'
+  | 'status'
+  | 'reset'
+  | 'finish'
+  /** Time added or removed by viewer donations. */
+  | 'time'
+  | 'system'
 
 export interface ActivityItem {
   id: string
