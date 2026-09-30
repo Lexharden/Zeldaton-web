@@ -8,6 +8,10 @@ services:
     restart: unless-stopped
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN (>= 16 chars)}
+      # First organizer account for /admin (only used while there are no users). If ADMIN_PASSWORD is
+      # empty, a random one is printed once in `docker compose logs backend`.
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       CORS_ORIGINS: https://${SITE_ADDRESS:-localhost}
       RUST_LOG: info
     volumes:

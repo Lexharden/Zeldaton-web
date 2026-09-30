@@ -49,9 +49,36 @@ validates the same files, so the two sides cannot drift apart silently.
 | Public REST `/api` | `/event`, `/racers`, `/racers/:id`, `/standings`, `/streams`, `/activity`, `/hiveshock/stats`, `/clocks`, `/health` |
 | Public WebSocket | `/ws`: `CLOCK_SNAPSHOT` on connect, then live events (types in `src/types/websocket.ts`) |
 | HiveShock ingestion | `WS /ingest`, `POST /ingest/events`; see [docs/hiveshock-ingest.md](docs/hiveshock-ingest.md) |
-| Organizer `/api/admin` | Bearer `ADMIN_TOKEN`: event, racers + channels, tokens, pause/resume/force-close/reset-day/adjust-time/finish, audit log |
+| Public catalog | `GET /api/catalog` (items and objectives by Link, enabled only) + `CATALOG_UPDATED` on the socket |
+| Organizer `/api/admin` | Session cookie (roles admin / moderator) or Bearer `ADMIN_TOKEN` (emergency): overview, event start/pause/resume/finish, racers + channels, tokens, pause/resume/force-close/reset-day/adjust-time/finish, catalog, accounts, audit log |
 
-Every organizer action lands in the `audit_log` table, the official record of the session.
+Every organizer action lands in the `audit_log` table, the official record of the session (with who did it).
+
+## Organizer panel (`/admin`)
+
+A CMS inside the same website: sign in at `/admin` with an organizer account.
+
+```bash
+# backend/.env (first start only: creates the first admin when there are no users yet)
+ADMIN_USER=yafel
+ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed ONCE on start
+```
+
+| Page | What for |
+| --- | --- |
+| Panel | Live dashboard: **start / pause / finish the event**, who is connected, clocks, progress, alerts, activity |
+| Event | Start/end, daily time, reset hour, win condition, objectives required to finish |
+| Racers | Create/edit, channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
+| Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. The site and HiveShock update on their own |
+| Audit | Who did what and when |
+| Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |
+
+Security: Argon2id passwords, HttpOnly + SameSite=Strict session cookie (`Secure` automatic; force with
+`COOKIE_SECURE`), CSRF token on every write, 5 wrong logins lock a username for 15 minutes, and every session
+ends when a password changes or an account is disabled. `ADMIN_TOKEN` (Bearer) still works as an emergency key.
+
+In development the panel talks to the backend through the Vite proxy (`/api`, `/ws`, `/ingest` → `127.0.0.1:8080`,
+change it with `VITE_PROXY_TARGET`), so `npm run dev` + `cargo run -p zeldathon-server` is all you need.
 
 ## Deploy
 
