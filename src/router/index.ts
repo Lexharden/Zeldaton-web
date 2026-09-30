@@ -1,4 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { adminApi } from '@/admin/api/AdminApi'
+import { adminGuard } from '@/admin/guard'
+import { useAdminStore } from '@/admin/stores/admin'
 
 /** Route-level code splitting: each page is its own chunk. */
 export const router = createRouter({
@@ -20,6 +23,49 @@ export const router = createRouter({
       component: () => import('@/pages/AboutHiveShock.vue'),
       meta: { eventHeader: false },
     },
+    // ---- organizer panel: its own chrome (`bare`), behind a login ------------------------------
+    {
+      path: '/admin/login',
+      name: 'admin-login',
+      component: () => import('@/admin/pages/Login.vue'),
+      meta: { bare: true },
+    },
+    {
+      path: '/admin',
+      component: () => import('@/admin/AdminLayout.vue'),
+      meta: { bare: true },
+      children: [
+        {
+          path: '',
+          name: 'admin-dashboard',
+          component: () => import('@/admin/pages/Dashboard.vue'),
+        },
+        {
+          path: 'event',
+          name: 'admin-event',
+          component: () => import('@/admin/pages/EventPage.vue'),
+          meta: { role: 'admin' },
+        },
+        {
+          path: 'racers',
+          name: 'admin-racers',
+          component: () => import('@/admin/pages/Racers.vue'),
+        },
+        {
+          path: 'catalog',
+          name: 'admin-catalog',
+          component: () => import('@/admin/pages/Catalog.vue'),
+          meta: { role: 'admin' },
+        },
+        { path: 'audit', name: 'admin-audit', component: () => import('@/admin/pages/Audit.vue') },
+        {
+          path: 'accounts',
+          name: 'admin-accounts',
+          component: () => import('@/admin/pages/Accounts.vue'),
+          meta: { role: 'admin' },
+        },
+      ],
+    },
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
@@ -34,3 +80,20 @@ export const router = createRouter({
     return { top: 0 }
   },
 })
+
+// Panel access: ask the server who we are once, then apply the pure guard.
+router.beforeEach(async (to) => {
+  if (!to.path.startsWith('/admin')) return true
+  const admin = useAdminStore()
+  if (!admin.ready) await admin.restore()
+  return adminGuard(to, admin.user)
+})
+
+// A 401 anywhere in the panel (session expired or revoked) sends the user back to the login page.
+adminApi.onUnauthorized = () => {
+  useAdminStore().clear()
+  const current = router.currentRoute.value
+  if (current.path.startsWith('/admin') && current.name !== 'admin-login') {
+    void router.push({ name: 'admin-login', query: { next: current.fullPath, expired: '1' } })
+  }
+}

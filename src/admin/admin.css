@@ -1,0 +1,179 @@
+/* Organizer panel controls. The rest of the look (panels, buttons, HUD labels) is the public site's. */
+.a-input,
+.a-select,
+.a-textarea {
+  width: 100%;
+  background: rgb(255 255 255 / 0.04);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 4px;
+  padding: 0.55rem 0.75rem;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+.a-textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+.a-select option {
+  background: #0b1419;
+}
+.a-input:focus,
+.a-select:focus,
+.a-textarea:focus {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.a-input:disabled,
+.a-select:disabled {
+  opacity: 0.5;
+}
+.a-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.a-hint {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+.a-error {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: #ff8aa0;
+}
+
+.a-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.a-btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.12);
+}
+.a-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.a-btn-primary {
+  background: var(--color-primary);
+  border-color: transparent;
+  color: #04140a;
+}
+.a-btn-primary:hover:not(:disabled) {
+  background: #5cb162;
+}
+.a-btn-gold {
+  background: var(--color-accent);
+  border-color: transparent;
+  color: #1b1300;
+}
+.a-btn-gold:hover:not(:disabled) {
+  background: #ffd36e;
+}
+.a-btn-danger {
+  background: rgb(255 77 109 / 0.14);
+  border-color: rgb(255 77 109 / 0.5);
+  color: #ff8aa0;
+}
+.a-btn-danger:hover:not(:disabled) {
+  background: rgb(255 77 109 / 0.26);
+}
+.a-btn-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+.a-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.a-table th {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+  white-space: nowrap;
+}
+.a-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  vertical-align: middle;
+}
+.a-table tbody tr:hover {
+  background: rgb(255 255 255 / 0.025);
+}
+
+.a-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.25);
+}
+.a-dot-on {
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 0.2);
+}
+
+.a-tab {
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.a-tab-active {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+.a-switch {
+  position: relative;
+  display: inline-block;
+  width: 2.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.18);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.a-switch::after {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.a-switch-on {
+  background: var(--color-primary);
+}
+.a-switch-on::after {
+  transform: translateX(1rem);
+}
