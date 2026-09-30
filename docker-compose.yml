@@ -31,6 +31,8 @@ services:
         VITE_DEMO_MODE: "false"
         VITE_API_URL: /api
         VITE_WS_URL: /ws
+        # Google Analytics 4: set GA_MEASUREMENT_ID=G-XXXXXXXXXX in .env (empty = off).
+        VITE_GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8081:8080"

@@ -1,0 +1,12 @@
+/* TEAM */
+Developer: Yafel GH
+Instagram: https://www.instagram.com/yaafel/
+
+/* THANKS */
+Powered by HiveShock
+The Zeldatón community and its streamers
+
+/* SITE */
+Language: Spanish / English
+Standards: HTML5, CSS3, TypeScript
+Components: Vue 3, Vite, Tailwind CSS, Rust (axum)

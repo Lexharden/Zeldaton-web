@@ -218,6 +218,7 @@ export const en: Messages = {
     freeLabel: 'FREE TO USE',
     freeBody:
       'HiveShock is free for everyone who plays, streams or watches. It is proprietary software.',
+    developer: 'HiveShock and this site are built by',
     active: 'ACTIVE',
     experimental: 'EXPERIMENTAL',
     planned: 'PLANNED',
@@ -468,6 +469,86 @@ export const en: Messages = {
     volvagia: 'Volvagia',
     morpha: 'Morpha',
   },
+  consent: {
+    title: 'COOKIES',
+    text: 'We use Google Analytics to learn, in aggregate, how many people visit the site and which pages they see. It only runs if you accept; your language and your choice are kept in your browser because they are needed.',
+    more: 'Learn more',
+    accept: 'Accept',
+    reject: 'Reject',
+    statusGranted: 'You accepted Google Analytics cookies.',
+    statusDenied: 'You rejected Google Analytics cookies: nothing from Google is loaded.',
+    statusNone: 'You have not decided about Google Analytics cookies yet.',
+  },
+  legal: {
+    eyebrow: 'LEGAL',
+    updated: 'Last updated: September 30, 2026',
+    privacy: {
+      title: 'Privacy and cookies',
+      intro: 'What data this site uses, which cookies it stores and how you decide.',
+      sections: [
+        {
+          h: 'Who is behind it',
+          p: 'This site is built and maintained by Yafel GH for the Zeldatón community event, powered by HiveShock. For any question about your data, reach us through the official event channels.',
+        },
+        {
+          h: 'What data we use',
+          p: 'As a visitor you do not create an account or give us personal data. The site shows public race information (racers, times, progress and activity) sent by the participating streamers themselves.',
+        },
+        {
+          h: 'Cookies and browser storage',
+          p: 'We keep the minimum:',
+          items: [
+            'Language (local storage, necessary): remembers whether you read the site in Spanish or English.',
+            'Your cookie choice (local storage, necessary): so we do not ask again until you change it.',
+            'Organizer panel session (cookie, necessary): only for organizers who sign in at /admin; it expires on its own.',
+            'Google Analytics 4 (_ga and _ga_* cookies, optional): only if you accept. They last up to 2 years.',
+          ],
+        },
+        {
+          h: 'Google Analytics',
+          p: 'If you accept, your browser connects to Google, which measures visits in aggregate (pages viewed, approximate country, device and browser type) and handles that data under its own privacy policy, possibly outside your country. We do not use it for advertising or to identify you, and the organizer panel is never measured. If you reject, the site loads nothing from Google. If your browser sends the Global Privacy Control signal, we treat it as a rejection.',
+        },
+        {
+          h: 'Changing your mind',
+          p: 'Any time, from "Cookie settings" at the bottom of the page. If you withdraw consent we delete the Analytics cookies; you can also delete them from your browser settings.',
+        },
+        {
+          h: 'Links to other platforms',
+          p: 'Links to Twitch, TikTok, YouTube, Discord and other networks take you to those platforms, which apply their own privacy and cookie policies.',
+        },
+        {
+          h: 'Your rights',
+          p: 'You can ask to access, correct or delete any data we hold about you, or object to its use, through the official event channels.',
+        },
+      ],
+    },
+    terms: {
+      title: 'Terms of use',
+      intro: 'The basic rules for using this site.',
+      sections: [
+        {
+          h: 'The event',
+          p: 'Zeldatón is an independent community event. It is not affiliated with, endorsed by or sponsored by Nintendo. The Legend of Zelda and Ocarina of Time are Nintendo trademarks; other logos and marks belong to their owners.',
+        },
+        {
+          h: 'Race information',
+          p: 'Times, progress and standings are shown live and may be delayed or wrong. Official results are decided by the event organizers.',
+        },
+        {
+          h: 'Using the site',
+          p: 'You may view and share the site freely. Do not try to tamper with the race, access the organizer panel without permission or overload the service.',
+        },
+        {
+          h: 'Development',
+          p: 'Site developed by Yafel GH, powered by HiveShock.',
+        },
+        {
+          h: 'Changes',
+          p: 'We may update these terms and the privacy policy; the date above shows the latest version.',
+        },
+      ],
+    },
+  },
   navi: {
     listen: 'Hey! Listen!',
   },
@@ -515,7 +596,9 @@ export const en: Messages = {
   footer: {
     explore: 'EXPLORE',
     follow: 'FOLLOW THE RACE',
-    privacy: 'Privacy',
+    privacy: 'Privacy and cookies',
+    cookies: 'Cookie settings',
+    developedBy: 'Developed by',
     terms: 'Terms',
     race: 'Race',
     racers: 'Racers',

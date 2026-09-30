@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ART } from '@/config/artwork'
+import { DEVELOPER } from '@/config/event'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
   Activity,
@@ -130,6 +131,9 @@ async function changePassword() {
           class="mt-3 inline-flex items-center gap-1.5 text-xs text-muted hover:text-white"
           ><ExternalLink class="size-3" />Ver el sitio público</RouterLink
         >
+        <p class="mt-3 text-[11px] text-muted">
+          Desarrollado por {{ DEVELOPER.name }} · Powered by HiveShock
+        </p>
       </div>
     </aside>
 

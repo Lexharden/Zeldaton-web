@@ -18,6 +18,18 @@ export const router = createRouter({
     { path: '/streams', name: 'streams', component: () => import('@/pages/Streams.vue') },
     { path: '/rules', name: 'rules', component: () => import('@/pages/Rules.vue') },
     {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/pages/Legal.vue'),
+      meta: { eventHeader: false, doc: 'privacy' },
+    },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('@/pages/Legal.vue'),
+      meta: { eventHeader: false, doc: 'terms' },
+    },
+    {
       path: '/hiveshock',
       name: 'hiveshock',
       component: () => import('@/pages/AboutHiveShock.vue'),

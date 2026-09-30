@@ -1,7 +1,7 @@
 # Zeldatón
 
 Live Ocarina of Time community race. Vue 3 website + Rust backend that keeps the official clocks,
-progress and ranking, fed by HiveShock.
+progress and ranking, fed by HiveShock. Developed by **Yafel GH**, powered by **HiveShock**.
 
 ```
 HiveShock ──WS/POST──▶ backend (Rust, Axum, SQLite) ──REST + WS──▶ website (Vue 3)
@@ -99,6 +99,21 @@ sudo nginx -t && sudo systemctl reload nginx
 
 The SQLite database lives in the `zeldathon_data` volume. Back it up with
 `docker compose exec backend ...` or `docker run --rm -v zeldaton-web_zeldathon_data:/data -v $PWD:/out debian cp /data/zeldathon.db /out/`.
+
+## Google Analytics 4 (optional)
+
+Put your measurement id in the server `.env` and rebuild; that is all:
+
+```bash
+GA_MEASUREMENT_ID=G-XXXXXXXXXX      # .env next to docker-compose.yml
+docker compose up -d --build frontend
+```
+
+(`npm run dev/build` reads `VITE_GA_MEASUREMENT_ID` instead.) Without an id nothing is loaded and no banner appears.
+With one, visitors get a cookie notice with equal **Accept / Reject** buttons: nothing is requested from Google
+until they accept (Consent Mode v2, script injected only after consent), rejecting later deletes the `_ga` cookies,
+Global Privacy Control counts as a rejection, and `/admin` is never tracked. Page views are sent on every SPA
+navigation. The policy lives at `/privacy` (and terms at `/terms`); "Cookie settings" in the footer reopens the notice.
 
 ## Before the event
 

@@ -10,8 +10,11 @@ ARG VITE_MOCK_MODE=false
 ARG VITE_DEMO_MODE=false
 ARG VITE_API_URL=/api
 ARG VITE_WS_URL=/ws
+# Google Analytics 4 measurement id (G-XXXXXXXXXX); empty = no analytics and no cookie banner.
+ARG VITE_GA_MEASUREMENT_ID=
 ENV VITE_MOCK_MODE=$VITE_MOCK_MODE VITE_DEMO_MODE=$VITE_DEMO_MODE \
-    VITE_API_URL=$VITE_API_URL VITE_WS_URL=$VITE_WS_URL
+    VITE_API_URL=$VITE_API_URL VITE_WS_URL=$VITE_WS_URL \
+    VITE_GA_MEASUREMENT_ID=$VITE_GA_MEASUREMENT_ID
 RUN npx vite build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine

@@ -5,6 +5,8 @@ import { SITE, SOCIAL_LINKS } from '@/config/event'
 import ArtImage from '@/components/common/ArtImage.vue'
 import { ART } from '@/config/artwork'
 import PoweredBy from '@/components/hiveshock/PoweredBy.vue'
+import { analyticsEnabled, openCookieSettings } from '@/analytics/analytics'
+import { DEVELOPER } from '@/config/event'
 
 const links = [
   { label: 'footer.race', to: '/race' },
@@ -66,10 +68,34 @@ const links = [
       <div
         class="container-x flex flex-col gap-3 py-5 text-xs text-muted md:flex-row md:items-center md:justify-between"
       >
-        <p class="max-w-2xl">{{ t('meta.disclaimer') }}</p>
-        <p class="flex gap-5">
-          <a href="#" class="hover:text-white">{{ t('footer.privacy') }}</a
-          ><a href="#" class="hover:text-white">{{ t('footer.terms') }}</a>
+        <div class="max-w-2xl space-y-1.5">
+          <p>{{ t('meta.disclaimer') }}</p>
+          <p>
+            {{ t('footer.developedBy') }}
+            <a
+              :href="DEVELOPER.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-semibold text-white/85 hover:text-accent"
+              >{{ DEVELOPER.name }}</a
+            >
+            ·
+            <RouterLink to="/hiveshock" class="font-semibold text-white/85 hover:text-accent"
+              >Powered by HiveShock</RouterLink
+            >
+          </p>
+        </div>
+        <p class="flex flex-wrap gap-x-5 gap-y-2">
+          <RouterLink to="/privacy" class="hover:text-white">{{ t('footer.privacy') }}</RouterLink>
+          <RouterLink to="/terms" class="hover:text-white">{{ t('footer.terms') }}</RouterLink>
+          <button
+            v-if="analyticsEnabled"
+            type="button"
+            class="hover:text-white"
+            @click="openCookieSettings"
+          >
+            {{ t('footer.cookies') }}
+          </button>
         </p>
       </div>
     </div>

@@ -15,6 +15,9 @@ export const EVENT_SCHEDULE = {
 } as const
 
 /** Main event channels: Twitch and TikTok. Replace with the official account URLs. */
+/** Who built this site (footer credit, meta author). HiveShock is the technology behind it. */
+export const DEVELOPER = { name: 'Yafel GH', url: 'https://www.instagram.com/yaafel/' } as const
+
 export const SOCIAL_LINKS = [
   { id: 'twitch', label: 'Twitch', href: 'https://twitch.tv' },
   { id: 'tiktok', label: 'TikTok', href: 'https://tiktok.com' },

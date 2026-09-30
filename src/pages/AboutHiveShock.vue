@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { DEVELOPER } from '@/config/event'
 import { t } from '@/i18n'
 import ArtImage from '@/components/common/ArtImage.vue'
 import { ART } from '@/config/artwork'
@@ -78,6 +79,16 @@ useSeo(
           </p>
           <p class="mt-4 max-w-2xl text-muted">
             {{ t('hiveshock.freeBody') }}
+          </p>
+          <p class="mt-6 text-sm text-white/80">
+            {{ t('hiveshock.developer') }}
+            <a
+              :href="DEVELOPER.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-semibold text-accent hover:underline"
+              >{{ DEVELOPER.name }}</a
+            >.
           </p>
         </div>
       </section>

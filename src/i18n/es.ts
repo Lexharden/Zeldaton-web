@@ -216,6 +216,7 @@ export const es = {
     licensing: 'Licencia',
     freeLabel: 'USO GRATUITO',
     freeBody: 'HiveShock es gratis para quien juega, transmite o mira. Es software propietario.',
+    developer: 'HiveShock y esta web los desarrolla',
     active: 'ACTIVA',
     experimental: 'EXPERIMENTAL',
     planned: 'PLANEADA',
@@ -469,6 +470,86 @@ export const es = {
     volvagia: 'Volvagia',
     morpha: 'Morpha',
   },
+  consent: {
+    title: 'COOKIES',
+    text: 'Usamos Google Analytics para saber, de forma agregada, cuántas personas visitan la web y qué páginas ven. Solo se activa si aceptas; el idioma y tu decisión se guardan en tu navegador porque son necesarios.',
+    more: 'Más información',
+    accept: 'Aceptar',
+    reject: 'Rechazar',
+    statusGranted: 'Aceptaste las cookies de Google Analytics.',
+    statusDenied: 'Rechazaste las cookies de Google Analytics: no se carga nada de Google.',
+    statusNone: 'Todavía no has decidido sobre las cookies de Google Analytics.',
+  },
+  legal: {
+    eyebrow: 'INFORMACIÓN LEGAL',
+    updated: 'Última actualización: 30 de septiembre de 2026',
+    privacy: {
+      title: 'Privacidad y cookies',
+      intro: 'Qué datos usa esta web, qué cookies guarda y cómo decides tú.',
+      sections: [
+        {
+          h: 'Quién está detrás',
+          p: 'Esta web la desarrolla y mantiene Yafel GH para el evento comunitario Zeldatón, con la tecnología de HiveShock. Para cualquier duda sobre tus datos, escríbenos por los canales oficiales del evento.',
+        },
+        {
+          h: 'Qué datos usamos',
+          p: 'Como visitante no creas ninguna cuenta ni nos das datos personales. La web muestra información pública de la carrera (corredores, tiempos, progreso y actividad) que envían los propios streamers participantes.',
+        },
+        {
+          h: 'Cookies y almacenamiento en tu navegador',
+          p: 'Guardamos lo mínimo:',
+          items: [
+            'Idioma (almacenamiento local, necesario): recuerda si ves la web en español o en inglés.',
+            'Tu decisión sobre cookies (almacenamiento local, necesario): para no volver a preguntarte hasta que la cambies.',
+            'Sesión del panel de organización (cookie, necesaria): solo para organizadores que inician sesión en /admin; caduca sola.',
+            'Google Analytics 4 (cookies _ga y _ga_*, opcionales): solo si aceptas. Duran hasta 2 años.',
+          ],
+        },
+        {
+          h: 'Google Analytics',
+          p: 'Si aceptas, tu navegador se conecta con Google, que mide las visitas de forma agregada (páginas vistas, país aproximado, tipo de dispositivo y navegador) y trata esos datos según su propia política de privacidad, posiblemente fuera de tu país. No lo usamos para publicidad ni para identificarte, y el panel de organización nunca se mide. Si rechazas, la web no carga nada de Google. Si tu navegador envía la señal Global Privacy Control, la tomamos como un rechazo.',
+        },
+        {
+          h: 'Cambiar tu decisión',
+          p: 'Cuando quieras, en «Preferencias de cookies» al pie de la página. Si retiras el permiso borramos las cookies de Analytics; también puedes borrarlas desde la configuración de tu navegador.',
+        },
+        {
+          h: 'Enlaces a otras plataformas',
+          p: 'Los enlaces a Twitch, TikTok, YouTube, Discord y otras redes te llevan a esas plataformas, que aplican sus propias políticas de privacidad y cookies.',
+        },
+        {
+          h: 'Tus derechos',
+          p: 'Puedes pedir acceso, corrección o eliminación de cualquier dato que tengamos sobre ti, u oponerte a su uso, a través de los canales oficiales del evento.',
+        },
+      ],
+    },
+    terms: {
+      title: 'Términos de uso',
+      intro: 'Las reglas básicas para usar esta web.',
+      sections: [
+        {
+          h: 'El evento',
+          p: 'Zeldatón es un evento comunitario independiente. No está afiliado, respaldado ni patrocinado por Nintendo. The Legend of Zelda y Ocarina of Time son marcas de Nintendo; los demás logos y marcas pertenecen a sus dueños.',
+        },
+        {
+          h: 'La información de la carrera',
+          p: 'Los tiempos, el progreso y las posiciones se muestran en vivo y pueden tener retrasos o errores. Los resultados oficiales los decide la organización del evento.',
+        },
+        {
+          h: 'Uso de la web',
+          p: 'Puedes ver y compartir la web libremente. No intentes alterar la carrera, acceder al panel de organización sin permiso ni sobrecargar el servicio.',
+        },
+        {
+          h: 'Desarrollo',
+          p: 'Web desarrollada por Yafel GH, con la tecnología de HiveShock.',
+        },
+        {
+          h: 'Cambios',
+          p: 'Podemos actualizar estos términos y la política de privacidad; la fecha de arriba indica la última versión.',
+        },
+      ],
+    },
+  },
   navi: {
     listen: '¡Hey! ¡Escucha!',
   },
@@ -525,7 +606,9 @@ export const es = {
   footer: {
     explore: 'EXPLORAR',
     follow: 'SIGUE LA CARRERA',
-    privacy: 'Privacidad',
+    privacy: 'Privacidad y cookies',
+    cookies: 'Preferencias de cookies',
+    developedBy: 'Desarrollado por',
     terms: 'Términos',
     race: 'Carrera',
     racers: 'Corredores',

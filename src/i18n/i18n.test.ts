@@ -36,6 +36,28 @@ describe('i18n', () => {
     expect(t('does.not.exist')).toBe('does.not.exist')
   })
 
+  it('has every text the cookie notice, footer and legal pages use', () => {
+    for (const lang of ['es', 'en'] as const) {
+      setLocale(lang)
+      for (const key of [
+        'consent.title',
+        'consent.text',
+        'consent.accept',
+        'consent.reject',
+        'footer.cookies',
+        'footer.developedBy',
+        'footer.privacy',
+        'footer.terms',
+        'legal.privacy.title',
+        'legal.terms.title',
+        'hiveshock.developer',
+      ]) {
+        expect(t(key), `${lang}: ${key}`).not.toBe(key)
+      }
+    }
+    setLocale('es')
+  })
+
   it('never uses the forbidden phrases for HiveShock', () => {
     const all = JSON.stringify([en, es]).toLowerCase()
     expect(all).not.toContain('open platform')
