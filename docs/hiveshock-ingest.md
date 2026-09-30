@@ -35,6 +35,7 @@ acknowledged but applied only once, so retries are safe.
 | `STATS_UPDATED` | `stats: { hearts?, maxHearts?, rupees?, skulltulas?, bossesDefeated? }` | Merged into the racer |
 | `GAME_FINISHED` | – | Accepted **only if every required objective is completed**; the racer finishes and the first one to do so is the winner |
 | `CHAT_EVENT` | `count?` | Counts toward the HiveShock chat metric |
+| `STREAM_STATE` | `live`, `viewers?` | The racer is (or is no longer) broadcasting on TikTok/Twitch and how many people watch. Accepted at any time while connected (no game session needed). Shown on the streams page; cleared automatically if HiveShock disconnects |
 
 Catalog ids (objectives, items) are in `backend/src/catalog.rs` and mirror `src/config/event.ts`.
 Area ids are free-form; ids the website knows (e.g. `water-temple`) are translated, others are shown as-is.

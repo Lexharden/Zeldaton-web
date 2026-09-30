@@ -171,6 +171,17 @@ fn ws_samples() -> Vec<(&'static str, WsMessage)> {
             },
         ),
         (
+            "STREAM_UPDATED",
+            WsMessage::StreamUpdated {
+                racer_id: id(),
+                stream: StreamState {
+                    is_live: true,
+                    thumbnail_url: None,
+                    viewers: Some(482),
+                },
+            },
+        ),
+        (
             "HIVESHOCK_STATS_UPDATED",
             WsMessage::HiveshockStatsUpdated {
                 stats: HiveShockStats {
@@ -190,7 +201,7 @@ fn every_websocket_message_matches_its_fixture() {
     let samples = ws_samples();
     assert_eq!(
         samples.len(),
-        17,
+        18,
         "one fixture per message type in src/types/websocket.ts"
     );
     for (name, msg) in samples {

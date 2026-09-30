@@ -16,6 +16,7 @@ const KNOWN: ReadonlySet<WsMessageType> = new Set<WsMessageType>([
   'STATS_UPDATED',
   'GAME_FINISHED',
   'RACER_STATUS_CHANGED',
+  'STREAM_UPDATED',
   'LIVE_ACTIVITY',
   'HIVESHOCK_STATS_UPDATED',
 ])
@@ -42,6 +43,7 @@ const REQUIRED: Partial<Record<WsMessageType, string[]>> = {
   STATS_UPDATED: ['racerId', 'stats'],
   GAME_FINISHED: ['racerId'],
   RACER_STATUS_CHANGED: ['racerId', 'status'],
+  STREAM_UPDATED: ['racerId', 'stream'],
   LIVE_ACTIVITY: ['activity'],
   HIVESHOCK_STATS_UPDATED: ['stats'],
 }

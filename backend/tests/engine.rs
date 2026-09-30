@@ -330,3 +330,116 @@ fn admin_can_adjust_time_and_revive_an_exhausted_racer() {
     assert_eq!(v.remaining_seconds, 600);
     assert_ne!(v.status, RacerStatus::Exhausted);
 }
+
+#[test]
+fn stream_state_updates_viewers_publishes_once_and_clamps() {
+    let mut s = state(t0());
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::Hello {
+            client_version: None,
+        },
+        t0(),
+    )
+    .unwrap();
+
+    // Works without a game session: the racer can be live on Twitch before opening the game.
+    let (fx, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(482),
+        },
+        t0(),
+    )
+    .unwrap();
+    assert_eq!(kinds(&fx), vec!["STREAM_UPDATED"]);
+    let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
+    assert!(stream.is_live);
+    assert_eq!(stream.viewers, Some(482));
+
+    // Same values again: nothing to publish.
+    let (fx, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(482),
+        },
+        t0(),
+    )
+    .unwrap();
+    assert!(fx.msgs.is_empty());
+
+    // Nonsense is clamped, a missing count is zero.
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(-5),
+        },
+        t0(),
+    )
+    .unwrap();
+    let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
+    assert_eq!(stream.viewers, Some(0));
+
+    // Off the air: no viewers, and not live because nobody is playing either.
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: false,
+            viewers: Some(99),
+        },
+        t0(),
+    )
+    .unwrap();
+    let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
+    assert_eq!(stream.viewers, None);
+    assert!(!stream.is_live);
+}
+
+#[test]
+fn stream_stays_live_while_playing_even_if_the_broadcast_is_reported_off() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: false,
+            viewers: None,
+        },
+        t0(),
+    )
+    .unwrap();
+    let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
+    assert!(stream.is_live, "playing counts as live");
+}
+
+#[test]
+fn losing_hiveshock_clears_the_reported_viewers() {
+    let mut s = state(t0());
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    s.attach_ingest("ralbat", zeldathon_server::state::IngestHandle { conn_id: 1, tx });
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(10),
+        },
+        t0(),
+    )
+    .unwrap();
+
+    let fx = s.detach_ingest("ralbat", 1);
+    assert!(kinds(&fx).contains(&"STREAM_UPDATED".to_string()));
+    let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
+    assert_eq!(stream.viewers, None);
+    assert!(!stream.is_live);
+}

@@ -401,6 +401,10 @@ pub enum WsMessage {
     HiveshockStatsUpdated {
         stats: HiveShockStats,
     },
+    StreamUpdated {
+        racer_id: String,
+        stream: StreamState,
+    },
 }
 
 /// Wire frame: the message plus a top-level `serverTimeUtc`, which the frontend socket

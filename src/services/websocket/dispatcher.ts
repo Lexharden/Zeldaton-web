@@ -86,6 +86,9 @@ export function dispatchMessage(message: WsMessage, serverTimeUtc?: string): voi
     case 'LIVE_ACTIVITY':
       hive.pushActivity(message.activity)
       break
+    case 'STREAM_UPDATED':
+      racers.patch(message.racerId, { stream: message.stream })
+      break
     case 'HIVESHOCK_STATS_UPDATED':
       hive.updateStats(message.stats)
       break

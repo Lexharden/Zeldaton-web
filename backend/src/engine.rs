@@ -58,6 +58,9 @@ pub enum IngestMsg {
     StatsUpdated { stats: RacerStats },
     GameFinished,
     ChatEvent { count: Option<u32> },
+    /// Whether the racer is broadcasting and how many people watch (HiveShock knows: it is
+    /// connected to TikTok/Twitch). Valid at any time while connected.
+    StreamState { live: bool, viewers: Option<i64> },
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -301,7 +304,9 @@ impl RaceState {
         let r = &mut self.racers[i];
         r.racer.status = status;
         let stream = r.racer.stream.get_or_insert_with(StreamState::default);
-        stream.is_live = matches!(status, RacerStatus::Live | RacerStatus::Paused);
+        // Live = playing, or HiveShock reports a broadcast (`viewers` is `Some` only then).
+        stream.is_live =
+            matches!(status, RacerStatus::Live | RacerStatus::Paused) || stream.viewers.is_some();
         fx.touch(i);
     }
 
@@ -630,6 +635,23 @@ impl RaceState {
                 self.finish_racer(i, None, now, &mut fx);
                 self.bump(&mut fx, |s| s.game_events += 1);
             }
+            IngestMsg::StreamState { live, viewers } => {
+                let viewers = viewers.map(|v| v.clamp(0, 10_000_000));
+                let racer = &mut self.racers[i].racer;
+                let stream = racer.stream.get_or_insert_with(StreamState::default);
+                let next_viewers = live.then(|| viewers.unwrap_or(0));
+                let next_live = live || playing;
+                if stream.viewers != next_viewers || stream.is_live != next_live {
+                    stream.viewers = next_viewers;
+                    stream.is_live = next_live;
+                    let update = stream.clone();
+                    fx.touch(i);
+                    fx.msgs.push(WsMessage::StreamUpdated {
+                        racer_id: racer_id.to_string(),
+                        stream: update,
+                    });
+                }
+            }
             IngestMsg::ChatEvent { count } => {
                 let n = i64::from(count.unwrap_or(1).min(1000));
                 self.bump(&mut fx, |s| s.chat_events += n);
@@ -831,6 +853,7 @@ impl RaceState {
                 r.racer.status = RacerStatus::Offline;
                 if let Some(s) = r.racer.stream.as_mut() {
                     s.is_live = false;
+                    s.viewers = None;
                 }
             }
             r.checkpoint.at = now;
@@ -859,6 +882,22 @@ impl RaceState {
                 .is_some_and(|h| h.conn_id == conn_id)
         {
             self.racers[i].ingest = None;
+            // Without HiveShock nobody vouches for the broadcast any more.
+            let playing = matches!(
+                self.racers[i].racer.status,
+                RacerStatus::Live | RacerStatus::Paused
+            );
+            if let Some(stream) = self.racers[i].racer.stream.as_mut()
+                && stream.viewers.is_some()
+            {
+                stream.viewers = None;
+                stream.is_live = playing;
+                fx.msgs.push(WsMessage::StreamUpdated {
+                    racer_id: id.to_string(),
+                    stream: stream.clone(),
+                });
+                fx.touch(i);
+            }
             self.stats_changed(&mut fx);
         }
         fx

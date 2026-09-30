@@ -1,7 +1,7 @@
 import type { ActivityItem, ClockState } from './race'
 import type { GameProgress } from './game'
 import type { HiveShockStats } from './hiveshock'
-import type { RacerStats, RacerStatus } from './racer'
+import type { RacerStats, RacerStatus, RacerStream } from './racer'
 
 export type ConnectionStatus =
   'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error'
@@ -28,6 +28,7 @@ export type WsMessage =
   | ({ type: 'STATS_UPDATED'; stats: RacerStats } & RacerScoped)
   | ({ type: 'GAME_FINISHED'; finalTimeSeconds?: number; finishedAtUtc?: string } & RacerScoped)
   | ({ type: 'RACER_STATUS_CHANGED'; status: RacerStatus } & RacerScoped)
+  | ({ type: 'STREAM_UPDATED'; stream: RacerStream } & RacerScoped)
   | { type: 'LIVE_ACTIVITY'; activity: ActivityItem }
   | { type: 'HIVESHOCK_STATS_UPDATED'; stats: Partial<HiveShockStats> }
 
