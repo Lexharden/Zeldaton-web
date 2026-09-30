@@ -4,6 +4,7 @@ import { adminApi } from '../api/AdminApi'
 import { messageOf, useToasts } from '../composables/useToasts'
 import type { ChannelInput, NewRacerInput } from '../types'
 import type { Racer } from '@/types/racer'
+import { AMERICAS_TIMEZONES, currentOffset, findZone } from '@/config/timezones'
 import Modal from './Modal.vue'
 
 /** Create (no `racer`) or edit a racer. On create the server returns the ingest token, shown once by the parent. */
@@ -36,6 +37,38 @@ const zones = (() => {
   }
 })()
 
+/** Picker value for "not in the list": the organizer types an IANA name instead. */
+const OTHER = '__other'
+const otherZone = ref(false)
+const zoneChoice = computed({
+  get: () => (otherZone.value || !findZone(form.value.timezone) ? OTHER : form.value.timezone),
+  set: (value: string) => {
+    if (value === OTHER) {
+      otherZone.value = true
+      return
+    }
+    otherZone.value = false
+    form.value.timezone = value
+    // Prefill the country from the zone when it is still empty.
+    const zone = findZone(value)
+    if (zone && !form.value.country.trim()) form.value.country = zone.country
+  },
+})
+/** Current offset of every listed zone (already with daylight saving), computed when the dialog opens. */
+const offsets = ref<Record<string, string>>({})
+const localNow = computed(() => {
+  try {
+    return new Intl.DateTimeFormat('es-MX', {
+      timeZone: form.value.timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date())
+  } catch {
+    return ''
+  }
+})
+
 watch(
   () => [props.open, props.racer] as const,
   ([open, racer]) => {
@@ -51,6 +84,11 @@ watch(
       tiktok: handle('tiktok'),
       youtube: handle('youtube'),
     }
+    otherZone.value = !findZone(form.value.timezone)
+    const now = new Date()
+    offsets.value = Object.fromEntries(
+      AMERICAS_TIMEZONES.flatMap((g) => g.zones).map((z) => [z.id, currentOffset(z.id, now)]),
+    )
   },
   { immediate: true },
 )
@@ -139,10 +177,29 @@ async function save() {
       <div class="grid gap-4 sm:grid-cols-2">
         <div>
           <label class="a-label" for="rf-tz">Zona horaria</label>
-          <input id="rf-tz" v-model="form.timezone" class="a-input" list="rf-zones" />
-          <datalist id="rf-zones"><option v-for="z in zones" :key="z" :value="z" /></datalist>
+          <select id="rf-tz" v-model="zoneChoice" class="a-select">
+            <optgroup v-for="g in AMERICAS_TIMEZONES" :key="g.label" :label="g.label">
+              <option v-for="z in g.zones" :key="z.id" :value="z.id">
+                {{ z.city }} · {{ z.area }}{{ offsets[z.id] ? ` (${offsets[z.id]})` : '' }}
+              </option>
+            </optgroup>
+            <option :value="OTHER">Otra zona (escribir el nombre IANA)…</option>
+          </select>
+          <template v-if="zoneChoice === OTHER">
+            <input
+              v-model="form.timezone"
+              class="a-input mt-2"
+              list="rf-zones"
+              placeholder="Europe/Madrid"
+              aria-label="Zona horaria (IANA)"
+            />
+            <datalist id="rf-zones"><option v-for="z in zones" :key="z" :value="z" /></datalist>
+          </template>
           <p v-if="zoneError" class="a-error">{{ zoneError }}</p>
-          <p v-else class="a-hint">Su día de 4 h se reinicia a las 06:00 de esta zona.</p>
+          <p v-else class="a-hint">
+            Allí son las {{ localNow }}. Su día se reinicia a la hora del evento en esta zona (el
+            horario de verano se aplica solo).
+          </p>
         </div>
         <div>
           <label class="a-label" for="rf-country">País (2 letras)</label>

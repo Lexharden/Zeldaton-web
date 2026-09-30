@@ -1,7 +1,7 @@
 import { runtime } from '@/config/runtime'
 import { ApiError, type RaceApi } from './RaceApi'
 
-/** REST adapter for the real Zeldathon/HiveShock backend. */
+/** REST adapter for the real Zeldatón/HiveShock backend. */
 export class HttpRaceApi implements RaceApi {
   constructor(
     private baseUrl = runtime.apiUrl,

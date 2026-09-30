@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { t } from '@/i18n'
 
 /**
  * A fairy companion that flies after the mouse (desktop only).
@@ -7,6 +8,9 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
  * Physics: underdamped spring toward the cursor + layered sine flutter, so she overshoots,
  * hovers and loops instead of sticking to the pointer. Turns golden over interactive elements.
  * Disabled for touch devices and prefers-reduced-motion. Rendering pauses when the tab is hidden.
+ *
+ * Easter egg: play Zelda's Lullaby with the arrow keys (← ↑ → ← ↑ →, the ocarina's C-left, C-up,
+ * C-right) and Navi plays the song, turns into a rainbow, draws the Triforce and shouts "Hey! Listen!".
  */
 const canvas = ref<HTMLCanvasElement | null>(null)
 const enabled = ref(false)
@@ -38,6 +42,12 @@ let alpha = 0 // fades in/out
 let excite = 0 // 0 = calm blue, 1 = golden "target" glow
 let clock = 0
 let emitAcc = 0
+
+/** Zelda's Lullaby on the ocarina: C-left, C-up, C-right, twice. */
+const LULLABY = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowRight']
+const PARTY_SECONDS = 6
+let played: string[] = []
+let party = 0 // seconds left of the easter egg
 
 const mouse = { x: -200, y: -200 }
 const navi = { x: -200, y: -200, vx: 0, vy: 0 }
@@ -79,7 +89,8 @@ function spawn(x: number, y: number, speed: number, burst = false) {
       ? 0.8 + Math.random() * 0.9
       : 0.55 + Math.random() * 0.95 + Math.min(speed / 1600, 0.4),
     size: burst ? 1.6 + Math.random() * 2.8 : 1.1 + Math.random() * 2.3,
-    hue: gold ? 44 + Math.random() * 10 : 190 + Math.random() * 30,
+    hue:
+      party > 0 ? Math.random() * 360 : gold ? 44 + Math.random() * 10 : 190 + Math.random() * 30,
     star: Math.random() < 0.18,
     phase: Math.random() * TAU,
   })
@@ -110,8 +121,9 @@ function update(dt: number) {
 
   alpha += ((visible ? 1 : 0) - alpha) * Math.min(1, dt * 6)
 
+  party = Math.max(0, party - dt)
   const speed = Math.hypot(navi.vx, navi.vy)
-  emitAcc += dt * (26 + speed * 0.09)
+  emitAcc += dt * (26 + speed * 0.09 + (party > 0 ? 60 : 0))
   while (emitAcc >= 1) {
     spawn(navi.x, navi.y, speed)
     emitAcc -= 1
@@ -163,7 +175,8 @@ function draw() {
   if (alpha < 0.01) return
   ctx.globalCompositeOperation = 'lighter'
 
-  const hue = 200 - excite * 150 // blue -> gold
+  // Blue -> gold over links; the easter egg cycles through every colour.
+  const hue = party > 0 ? (clock * 140) % 360 : 200 - excite * 150
   const core = `hsla(${hue}, 100%, 96%, ${alpha})`
   const mid = `hsla(${hue}, 100%, 72%, ${0.75 * alpha})`
   const halo = `hsla(${hue}, 100%, 60%, ${0.28 * alpha})`
@@ -236,6 +249,149 @@ function draw() {
   ctx.restore()
 
   ctx.globalCompositeOperation = 'source-over'
+  if (party > 0) drawParty(x, y)
+}
+
+/** Easter egg overlay: a golden Triforce above Navi and a "Hey! Listen!" bubble. */
+function drawParty(x: number, y: number) {
+  if (!ctx) return
+  // Fade in over the first 0.4 s and out over the last second.
+  const shown = PARTY_SECONDS - party
+  const a = Math.min(1, shown / 0.4, party) * alpha
+
+  // Triforce: three golden triangles, gently spinning in and pulsing.
+  const size = 15 * (0.8 + Math.min(1, shown * 2) * 0.2 + Math.sin(clock * 6) * 0.04)
+  const tx = x
+  const ty = y - 58
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  glow(tx, ty + size * 0.3, size * 3, [
+    [0, `hsla(46, 100%, 70%, ${0.35 * a})`],
+    [1, 'hsla(46, 100%, 60%, 0)'],
+  ])
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.translate(tx, ty)
+  ctx.rotate(Math.max(0, 1 - shown * 2) * Math.PI)
+  const hgt = size * Math.sqrt(3)
+  const tri = (cx: number, cy: number) => {
+    if (!ctx) return
+    ctx.moveTo(cx, cy - hgt / 2)
+    ctx.lineTo(cx + size, cy + hgt / 2)
+    ctx.lineTo(cx - size, cy + hgt / 2)
+    ctx.closePath()
+  }
+  ctx.beginPath()
+  tri(0, -hgt / 2)
+  tri(-size, hgt / 2)
+  tri(size, hgt / 2)
+  ctx.fillStyle = `hsla(46, 95%, 58%, ${a})`
+  ctx.strokeStyle = `hsla(40, 90%, 30%, ${a})`
+  ctx.lineWidth = 1.2
+  ctx.fill()
+  ctx.stroke()
+  ctx.restore()
+
+  // Speech bubble to the right of Navi.
+  const text = t('navi.listen')
+  ctx.save()
+  ctx.font = '700 16px "Barlow Condensed", "Inter Variable", system-ui, sans-serif'
+  const padX = 10
+  const bw = ctx.measureText(text).width + padX * 2
+  const bh = 26
+  const bx = Math.min(x + 26, w - bw - 8)
+  const by = Math.max(8, y - 44)
+  ctx.globalAlpha = a
+  ctx.fillStyle = 'rgba(6, 12, 16, 0.88)'
+  ctx.strokeStyle = 'rgba(120, 200, 255, 0.9)'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.roundRect(bx, by, bw, bh, 8)
+  ctx.moveTo(bx + 10, by + bh)
+  ctx.lineTo(bx + 4, by + bh + 8)
+  ctx.lineTo(bx + 18, by + bh)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#e8f6ff'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, bx + padX, by + bh / 2 + 1)
+  ctx.restore()
+}
+
+/** Zelda's Lullaby on a soft, ocarina-like synth (no audio files). */
+function playLullaby() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctx) return
+    const ac = new Ctx()
+    // B4 D5 A4, B4 D5 A4 — long, short, long.
+    const notes: [number, number][] = [
+      [493.88, 0.6],
+      [587.33, 0.3],
+      [440.0, 0.9],
+      [493.88, 0.6],
+      [587.33, 0.3],
+      [440.0, 1.3],
+    ]
+    const out = ac.createGain()
+    out.gain.value = 0.18
+    out.connect(ac.destination)
+    let at = ac.currentTime + 0.05
+    for (const [freq, dur] of notes) {
+      const osc = ac.createOscillator()
+      const env = ac.createGain()
+      const vibrato = ac.createOscillator()
+      const depth = ac.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      vibrato.frequency.value = 5.5
+      depth.gain.value = freq * 0.006
+      vibrato.connect(depth).connect(osc.frequency)
+      env.gain.setValueAtTime(0, at)
+      env.gain.linearRampToValueAtTime(1, at + 0.05)
+      env.gain.setValueAtTime(1, at + dur * 0.75)
+      env.gain.linearRampToValueAtTime(0, at + dur)
+      osc.connect(env).connect(out)
+      osc.start(at)
+      vibrato.start(at)
+      osc.stop(at + dur + 0.02)
+      vibrato.stop(at + dur + 0.02)
+      at += dur
+    }
+    setTimeout(() => void ac.close(), (at - ac.currentTime + 0.5) * 1000)
+  } catch {
+    // Audio is a bonus: the visual part still plays.
+  }
+}
+
+/** Keys typed into a form are never part of the song. */
+function isTyping(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || !!target.closest('input, textarea, select'))
+  )
+}
+
+function onSongKey(e: KeyboardEvent) {
+  if (e.altKey || e.ctrlKey || e.metaKey || isTyping(e.target)) return
+  if (!e.key.startsWith('Arrow')) {
+    played = []
+    return
+  }
+  played = [...played, e.key].slice(-LULLABY.length)
+  if (played.length === LULLABY.length && played.every((k, i) => k === LULLABY[i])) {
+    played = []
+    party = PARTY_SECONDS
+    // If the mouse never entered the page, show her in the middle of the screen.
+    if (!visible) {
+      visible = true
+      mouse.x = navi.x = w / 2
+      mouse.y = navi.y = h / 2
+    }
+    for (let i = 0; i < 70; i++) spawn(navi.x, navi.y, 0, true)
+    playLullaby()
+  }
 }
 
 function frame(t: number) {
@@ -277,6 +433,7 @@ function start() {
   window.addEventListener('mousemove', move, { passive: true })
   window.addEventListener('mouseover', over, { passive: true })
   window.addEventListener('mousedown', down, { passive: true })
+  window.addEventListener('keydown', onSongKey)
   window.addEventListener('resize', resize)
   document.documentElement.addEventListener('mouseleave', leave)
   document.addEventListener('visibilitychange', vis)
@@ -284,6 +441,7 @@ function start() {
     () => window.removeEventListener('mousemove', move),
     () => window.removeEventListener('mouseover', over),
     () => window.removeEventListener('mousedown', down),
+    () => window.removeEventListener('keydown', onSongKey),
     () => window.removeEventListener('resize', resize),
     () => document.documentElement.removeEventListener('mouseleave', leave),
     () => document.removeEventListener('visibilitychange', vis),

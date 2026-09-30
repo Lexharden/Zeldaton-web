@@ -12,7 +12,7 @@
   "edition": "2026",
   "game": "Ocarina of Time",
   "id": "zeldathon-2026",
-  "name": "Zeldathon",
+  "name": "Zeldatón",
   "rules": {
     "requiredObjectiveIds": [
       "kokiri-forest",

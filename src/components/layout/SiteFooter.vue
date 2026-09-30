@@ -21,14 +21,14 @@ const links = [
       class="pointer-events-none absolute -bottom-10 left-1/2 -translate-x-1/2 select-none whitespace-nowrap font-display text-[clamp(6rem,24vw,22rem)] font-extrabold leading-none text-white/[0.035]"
       aria-hidden="true"
     >
-      ZELDATHON
+      ZELDATÓN
     </div>
     <div class="container-x relative grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr]">
       <div>
         <ArtImage
-          :src="ART.logo"
-          alt="The Legend of Zelda: Ocarina of Time"
-          class="h-40 w-auto drop-shadow-[0_0_24px_rgb(245_196_81/0.25)]"
+          :src="ART.zeldatonLogo"
+          alt="Zeldatón"
+          class="h-24 w-auto drop-shadow-[0_0_24px_rgb(245_196_81/0.25)] sm:h-28"
         >
           <p class="display text-6xl text-white">{{ SITE.name }}</p>
         </ArtImage>

@@ -4,6 +4,7 @@ import { useEventStore } from '@/stores/event'
 import { formatDuration } from '@/utils/format'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import ConnectionIndicator from '@/components/common/ConnectionIndicator.vue'
+import { ART } from '@/config/artwork'
 
 /** Slim context strip on inner pages: event name, game, status and race clock. */
 const event = useEventStore()
@@ -14,7 +15,16 @@ const { totalSeconds: until } = useCountdown(() => event.startMs, 'down')
 <template>
   <div class="border-b border-line bg-surface/70 pt-16">
     <div class="container-x flex flex-wrap items-center gap-x-6 gap-y-2 py-2.5">
-      <span class="display text-lg tracking-wider text-white">ZELDATHON</span>
+      <img
+        :src="ART.zeldatonLogoSmall"
+        alt="Zeldatón"
+        width="480"
+        height="149"
+        class="h-6 w-auto"
+        loading="lazy"
+        decoding="async"
+        draggable="false"
+      />
       <span class="hud-label hidden sm:inline">{{
         event.info?.game?.toUpperCase() ?? 'OCARINA OF TIME'
       }}</span>

@@ -2,19 +2,19 @@ import type { Messages } from './es'
 
 export const en: Messages = {
   meta: {
-    title: 'Zeldathon — Ocarina of Time Community Race',
+    title: 'Zeldatón — Ocarina of Time Community Race',
     description:
-      'Zeldathon is a live Ocarina of Time community race where streamers compete to reach the finish line first.',
+      'Zeldatón is a live Ocarina of Time community race where streamers compete to reach the finish line first.',
     disclaimer:
-      'Zeldathon is an independent community event. It is not affiliated with, endorsed by or sponsored by Nintendo.',
+      'Zeldatón is an independent community event. It is not affiliated with, endorsed by or sponsored by Nintendo.',
     tagline: 'THE OCARINA OF TIME COMMUNITY RACE',
     pages: {
       race: 'Live Race',
-      raceDesc: 'Live standings, progress and clocks for the Zeldathon Ocarina of Time race.',
+      raceDesc: 'Live standings, progress and clocks for the Zeldatón Ocarina of Time race.',
       streams: 'Streams',
-      streamsDesc: 'Watch every Zeldathon racer live on Twitch and YouTube.',
+      streamsDesc: 'Watch every Zeldatón racer live on Twitch and YouTube.',
       rules: 'Rules',
-      rulesDesc: 'The rules of the Zeldathon Ocarina of Time community race.',
+      rulesDesc: 'The rules of the Zeldatón Ocarina of Time community race.',
       hiveshock: 'HiveShock',
       hiveshockDesc: 'HiveShock connects games, streamers and communities in real time.',
       notFound: 'Page not found',
@@ -314,7 +314,7 @@ export const en: Messages = {
     },
     faq: [
       {
-        q: 'What is Zeldathon?',
+        q: 'What is Zeldatón?',
         a: 'A live community race where streamers play a modified Ocarina of Time and compete to reach the finish line first.',
       },
       {
@@ -467,6 +467,9 @@ export const en: Messages = {
     'phantom-ganon': 'Phantom Ganon',
     volvagia: 'Volvagia',
     morpha: 'Morpha',
+  },
+  navi: {
+    listen: 'Hey! Listen!',
   },
   timezones: {
     'America/Mexico_City': 'Mexico City',

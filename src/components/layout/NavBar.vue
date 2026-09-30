@@ -4,7 +4,7 @@ import { t } from '@/i18n'
 import { Menu, X } from 'lucide-vue-next'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import LogoMark from '@/components/common/LogoMark.vue'
+import { ART } from '@/config/artwork'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import { useEventStore } from '@/stores/event'
 
@@ -59,8 +59,15 @@ watch(open, (v) => (document.body.style.overflow = v ? 'hidden' : ''))
   >
     <nav class="container-x flex h-16 items-center gap-6" aria-label="Main">
       <RouterLink to="/" class="flex items-center gap-2.5" :aria-label="t('nav.home')">
-        <LogoMark />
-        <span class="display text-[1.7rem] tracking-[0.04em] text-white">ZELDATHON</span>
+        <img
+          :src="ART.zeldatonLogoSmall"
+          alt="Zeldatón"
+          width="480"
+          height="149"
+          class="h-9 w-auto drop-shadow-[0_0_10px_rgb(245_196_81/0.25)] sm:h-10"
+          decoding="async"
+          draggable="false"
+        />
       </RouterLink>
 
       <ul class="ml-6 hidden items-center gap-1 lg:flex">

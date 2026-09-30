@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ART } from '@/config/artwork'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
   Activity,
@@ -11,7 +12,6 @@ import {
   LayoutDashboard,
   LogOut,
   ScrollText,
-  ShieldCheck,
   Users,
 } from 'lucide-vue-next'
 import { adminApi } from './api/AdminApi'
@@ -78,8 +78,14 @@ async function changePassword() {
     >
       <div class="flex items-center justify-between gap-3 p-4 lg:block">
         <RouterLink :to="{ name: 'admin-dashboard' }" class="flex items-center gap-2">
-          <ShieldCheck class="size-6 text-accent" aria-hidden="true" />
-          <span class="display text-2xl text-white">ZELDATHON</span>
+          <img
+            :src="ART.zeldatonLogoSmall"
+            alt="Zeldatón"
+            width="480"
+            height="149"
+            class="h-10 w-auto"
+            draggable="false"
+          />
         </RouterLink>
         <p class="hud-label hidden text-[10px] lg:mt-1 lg:block">PANEL DE ORGANIZACIÓN</p>
       </div>

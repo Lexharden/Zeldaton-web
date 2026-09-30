@@ -1,4 +1,5 @@
 import { intlLocale, t } from '@/i18n'
+import { findZone } from '@/config/timezones'
 
 /** Timezone-aware helpers. Everything takes an IANA id; browser timezone is never assumed. */
 
@@ -98,6 +99,8 @@ export function formatTimezone(timezone: string): string {
   const key = `timezones.${timezone}`
   const translated = t(key)
   if (translated !== key) return translated
+  const known = findZone(timezone)
+  if (known) return known.city
   const city = timezone.split('/').pop() ?? timezone
   return city.replace(/_/g, ' ')
 }

@@ -1,4 +1,4 @@
-# HiveShock → Zeldathon ingestion contract
+# HiveShock → Zeldatón ingestion contract
 
 HiveShock (running on each streamer's machine) pushes game telemetry to the backend. The backend is
 the **only authority** for the daily clock, ranking and winner: HiveShock reports facts, the server

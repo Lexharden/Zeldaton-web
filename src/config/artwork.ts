@@ -4,6 +4,10 @@
  */
 export const ART = {
   logo: '/tloz.png',
+  /** Event logo (optimized from /logo-zeldaton.png, which stays as the full-size original). */
+  zeldatonLogo: '/logo-zeldaton.webp',
+  /** Small version for bars and headers (480 px wide). */
+  zeldatonLogoSmall: '/logo-zeldaton-sm.webp',
   hiveshockLogo: '/logo-HiveShock.png',
   heroBg: '/art/hero-bg.jpg',
   heroCharacter: '/art/hero-link.png',

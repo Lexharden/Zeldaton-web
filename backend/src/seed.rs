@@ -28,7 +28,7 @@ pub const ROSTER: [(&str, &str); 9] = [
 pub fn default_event() -> EventInfo {
     EventInfo {
         id: "zeldathon-2026".into(),
-        name: "Zeldathon".into(),
+        name: "Zeldatón".into(),
         game: "Ocarina of Time".into(),
         edition: "2026".into(),
         status: EventStatus::Upcoming,

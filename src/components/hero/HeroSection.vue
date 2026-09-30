@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import { computed } from 'vue'
 import { ChevronsDown } from 'lucide-vue-next'
 import { ART } from '@/config/artwork'
+import ArtImage from '@/components/common/ArtImage.vue'
 import GamingBackground from '@/components/common/GamingBackground.vue'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import Countdown from '@/components/countdown/Countdown.vue'
@@ -35,13 +36,22 @@ const pillars = computed(() => [
 
     <div class="container-x grid items-center gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-6">
       <div>
+        <ArtImage
+          :src="ART.zeldatonLogo"
+          alt="Zeldatón"
+          eager
+          width="1200"
+          height="372"
+          class="enter mb-6 h-20 w-auto drop-shadow-[0_0_28px_rgb(245_196_81/0.3)] sm:h-28 lg:h-32"
+          style="--d: 0"
+        />
         <p class="enter mb-5 flex flex-wrap items-center gap-3" style="--d: 0">
           <LiveBadge
             :status="event.status"
             :label="event.status === 'live' ? t('nav.liveNow') : undefined"
           />
           <span class="hud-label !text-white/70"
-            >{{ event.info?.name?.toUpperCase() ?? 'ZELDATHON' }} {{ event.info?.edition }}</span
+            >{{ event.info?.name?.toUpperCase() ?? 'ZELDATÓN' }} {{ event.info?.edition }}</span
           >
         </p>
 

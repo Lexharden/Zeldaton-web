@@ -1,4 +1,4 @@
-# Zeldathon
+# Zeldatón
 
 Live Ocarina of Time community race. Vue 3 website + Rust backend that keeps the official clocks,
 progress and ranking, fed by HiveShock.

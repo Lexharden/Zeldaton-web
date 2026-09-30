@@ -9,7 +9,7 @@ export function createMockEvent(forced: EventStatus | null): EventInfo {
   const started = Date.now() >= Date.parse(EVENT_SCHEDULE.startAtUtc)
   return {
     id: 'zeldathon-2026',
-    name: 'Zeldathon',
+    name: 'Zeldatón',
     game: 'Ocarina of Time',
     edition: '2026',
     status: forced ?? (started ? 'live' : 'upcoming'),

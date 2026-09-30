@@ -202,7 +202,7 @@ function saved(token?: string) {
       :open="secret.open"
       :title="secret.title"
       :secret="secret.value"
-      note="En HiveShock: menú Zeldathon → pega este token junto con la dirección del servidor."
+      note="En HiveShock: menú Zeldatón → pega este token junto con la dirección del servidor."
       @close="secret.open = false"
     />
   </div>

@@ -40,7 +40,7 @@ const overview: Overview = {
   serverTimeUtc: '2026-10-07T13:00:00.000Z',
   event: {
     id: 'z',
-    name: 'Zeldathon',
+    name: 'Zeldatón',
     game: 'OoT',
     edition: '2026',
     status: 'live',
@@ -190,7 +190,7 @@ describe('Dashboard', () => {
     vi.spyOn(adminApi, 'overview').mockResolvedValue(overview)
     const { wrapper } = await mountPage(Dashboard)
     const text = wrapper.text()
-    expect(text).toContain('Zeldathon')
+    expect(text).toContain('Zeldatón')
     expect(text).toContain('RALBAT')
     expect(text).toContain('CUACO')
     expect(text).toContain('1 / 2') // connected
@@ -421,7 +421,7 @@ describe('Audit and Event pages', () => {
       objectives: DEFAULT_CATALOG.objectives,
     })
     const { wrapper } = await mountPage(EventPage)
-    expect((wrapper.find('#ev-name').element as HTMLInputElement).value).toBe('Zeldathon')
+    expect((wrapper.find('#ev-name').element as HTMLInputElement).value).toBe('Zeldatón')
     expect((wrapper.find('#ev-h').element as HTMLInputElement).value).toBe('4')
     expect(wrapper.text()).toContain('Cada corredor juega hasta 4 h al día')
     expect(wrapper.text()).toContain('Espada'.slice(0, 0) + 'Gran Árbol Deku') // objectives from the catalog

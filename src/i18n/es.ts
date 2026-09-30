@@ -1,20 +1,19 @@
 /** Español latino (México). Fuente de verdad de las claves: en.ts debe tener la misma forma. */
 export const es = {
   meta: {
-    title: 'Zeldathon — La carrera comunitaria de Ocarina of Time',
+    title: 'Zeldatón — La carrera comunitaria de Ocarina of Time',
     description:
-      'Zeldathon es una carrera comunitaria en vivo de Ocarina of Time donde streamers compiten por llegar primero a la meta.',
+      'Zeldatón es una carrera comunitaria en vivo de Ocarina of Time donde streamers compiten por llegar primero a la meta.',
     disclaimer:
-      'Zeldathon es un evento comunitario independiente. No está afiliado, respaldado ni patrocinado por Nintendo.',
+      'Zeldatón es un evento comunitario independiente. No está afiliado, respaldado ni patrocinado por Nintendo.',
     tagline: 'LA CARRERA COMUNITARIA DE OCARINA OF TIME',
     pages: {
       race: 'Carrera en vivo',
-      raceDesc:
-        'Posiciones, progreso y relojes en vivo de la carrera Zeldathon de Ocarina of Time.',
+      raceDesc: 'Posiciones, progreso y relojes en vivo de la carrera Zeldatón de Ocarina of Time.',
       streams: 'Transmisiones',
-      streamsDesc: 'Mira a cada corredor de Zeldathon en vivo en Twitch y YouTube.',
+      streamsDesc: 'Mira a cada corredor de Zeldatón en vivo en Twitch y YouTube.',
       rules: 'Reglas',
-      rulesDesc: 'Las reglas de la carrera comunitaria Zeldathon de Ocarina of Time.',
+      rulesDesc: 'Las reglas de la carrera comunitaria Zeldatón de Ocarina of Time.',
       hiveshock: 'HiveShock',
       hiveshockDesc: 'HiveShock conecta juegos, streamers y comunidades en tiempo real.',
       notFound: 'Página no encontrada',
@@ -313,7 +312,7 @@ export const es = {
     },
     faq: [
       {
-        q: '¿Qué es Zeldathon?',
+        q: '¿Qué es Zeldatón?',
         a: 'Una carrera comunitaria en vivo donde streamers juegan una versión modificada de Ocarina of Time y compiten por llegar primero a la meta.',
       },
       {
@@ -469,6 +468,9 @@ export const es = {
     'phantom-ganon': 'Ganon Fantasma',
     volvagia: 'Volvagia',
     morpha: 'Morpha',
+  },
+  navi: {
+    listen: '¡Hey! ¡Escucha!',
   },
   timezones: {
     'America/Mexico_City': 'Ciudad de México',

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { LogIn, ShieldCheck } from 'lucide-vue-next'
+import { LogIn } from 'lucide-vue-next'
+import { ART } from '@/config/artwork'
 import { AdminApiError } from '../api/AdminApi'
 import { safeNext } from '../guard'
 import { useAdminStore } from '../stores/admin'
@@ -44,8 +45,16 @@ async function submit() {
     <form class="panel panel-gold w-full max-w-sm" @submit.prevent="submit">
       <div class="space-y-5 p-6">
         <div class="text-center">
-          <ShieldCheck class="mx-auto size-9 text-accent" aria-hidden="true" />
-          <h1 class="display mt-2 text-4xl text-white">ZELDATHON</h1>
+          <h1>
+            <img
+              :src="ART.zeldatonLogoSmall"
+              alt="Zeldatón"
+              width="480"
+              height="149"
+              class="mx-auto h-20 w-auto"
+              draggable="false"
+            />
+          </h1>
           <p class="hud-label">PANEL DE ORGANIZACIÓN</p>
         </div>
         <p

@@ -3,7 +3,7 @@ import type { ItemDefinition, ObjectiveDefinition } from '@/types/game'
 import type { HiveShockCapability } from '@/types/hiveshock'
 
 /** Brand constants. Translatable copy lives in src/i18n. */
-export const SITE = { name: 'ZELDATHON' } as const
+export const SITE = { name: 'ZELDATÓN' } as const
 
 /**
  * Official event dates. 7 Oct 2026 at 06:00 Mexico City (UTC-6, no DST) = the daily reset time,
