@@ -11,4 +11,5 @@ dist
 *.db-wal
 dev-tokens.json
 backend/.env
-data/
+# Runtime data folder (docker volume). Anchored: a bare `data/` also ignored src/data/.
+/data/
