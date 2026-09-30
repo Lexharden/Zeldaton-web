@@ -1,0 +1,12 @@
+{
+  "clock": {
+    "racerId": "ralbat",
+    "remainingMs": 14400000,
+    "resetAtUtc": "2026-10-08T12:00:00.000Z",
+    "serverTimeUtc": "2026-10-07T13:00:00.000Z",
+    "status": "online"
+  },
+  "racerId": "ralbat",
+  "serverTimeUtc": "2026-10-07T13:00:00.000Z",
+  "type": "DAILY_RESET"
+}

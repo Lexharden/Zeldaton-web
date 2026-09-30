@@ -1,0 +1,11 @@
+{
+  "serverTimeUtc": "2026-10-07T13:00:00.000Z",
+  "stats": {
+    "chatEvents": 319,
+    "connectedRacers": 8,
+    "gameEvents": 12842,
+    "itemEvents": 1294,
+    "progressEvents": 842
+  },
+  "type": "HIVESHOCK_STATS_UPDATED"
+}

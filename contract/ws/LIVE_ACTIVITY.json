@@ -1,0 +1,15 @@
+{
+  "activity": {
+    "code": "ITEM_ACQUIRED",
+    "detail": "LONGSHOT",
+    "id": "act-1",
+    "kind": "item",
+    "message": "Ralbat acquired longshot",
+    "racerId": "ralbat",
+    "racerName": "Ralbat",
+    "subject": "longshot",
+    "timestampUtc": "2026-10-07T13:00:00.000Z"
+  },
+  "serverTimeUtc": "2026-10-07T13:00:00.000Z",
+  "type": "LIVE_ACTIVITY"
+}

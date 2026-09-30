@@ -1,0 +1,30 @@
+# Production-style stack:  npm run build && docker compose up -d --build
+#   ADMIN_TOKEN=<long random> SITE_ADDRESS=zeldathon.example.com docker compose up -d --build
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN (>= 16 chars)}
+      CORS_ORIGINS: https://${SITE_ADDRESS:-localhost}
+      RUST_LOG: info
+    volumes:
+      - ./data:/data
+    expose: ["8080"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./dist:/srv:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

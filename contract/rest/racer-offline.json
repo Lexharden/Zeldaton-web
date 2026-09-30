@@ -1,0 +1,17 @@
+{
+  "channels": [],
+  "completedObjectives": [],
+  "displayName": "Insomnia",
+  "elapsedSeconds": 0,
+  "id": "insomnia",
+  "items": {},
+  "progressPercentage": 0.0,
+  "remainingSeconds": 14400,
+  "slug": "insomnia",
+  "stats": {},
+  "status": "offline",
+  "stream": {
+    "isLive": false
+  },
+  "timezone": "America/Mexico_City"
+}

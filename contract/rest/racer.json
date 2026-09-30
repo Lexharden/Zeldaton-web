@@ -1,0 +1,35 @@
+{
+  "channels": [
+    {
+      "handle": "ralbat",
+      "platform": "twitch",
+      "url": "https://twitch.tv/ralbat"
+    },
+    {
+      "handle": "ralbat",
+      "platform": "tiktok",
+      "url": "https://tiktok.com/@ralbat"
+    }
+  ],
+  "completedObjectives": [
+    "kokiri-forest",
+    "deku-tree"
+  ],
+  "currentArea": "water-temple",
+  "currentObjective": "shadow-temple",
+  "displayName": "Ralbat",
+  "elapsedSeconds": 60,
+  "id": "ralbat",
+  "items": {
+    "longshot": true
+  },
+  "progressPercentage": 76.0,
+  "remainingSeconds": 14340,
+  "slug": "ralbat",
+  "stats": {},
+  "status": "live",
+  "stream": {
+    "isLive": true
+  },
+  "timezone": "America/Mexico_City"
+}

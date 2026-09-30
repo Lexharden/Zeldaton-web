@@ -1,0 +1,26 @@
+{
+  "dailyBudgetSeconds": 14400,
+  "dailyResetLocalTime": "06:00",
+  "edition": "2026",
+  "game": "Ocarina of Time",
+  "id": "zeldathon-2026",
+  "name": "Zeldathon",
+  "rules": {
+    "requiredObjectiveIds": [
+      "kokiri-forest",
+      "deku-tree",
+      "dodongos-cavern",
+      "jabu-jabu",
+      "forest-temple",
+      "fire-temple",
+      "water-temple",
+      "shadow-temple",
+      "spirit-temple",
+      "ganons-castle"
+    ],
+    "winCondition": "First racer to complete all required objectives crosses the finish line."
+  },
+  "startAtUtc": "2026-10-07T12:00:00.000Z",
+  "status": "live",
+  "timezone": "America/Mexico_City"
+}

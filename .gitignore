@@ -1,0 +1,14 @@
+/target
+node_modules
+dist
+.env
+.env.local
+*.local
+
+# Backend
+*.db
+*.db-shm
+*.db-wal
+dev-tokens.json
+backend/.env
+data/
