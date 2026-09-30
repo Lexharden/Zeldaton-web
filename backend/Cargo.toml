@@ -14,6 +14,7 @@ name = "simulate"
 path = "src/bin/simulate.rs"
 
 [dependencies]
+argon2 = "0.5"
 axum = { version = "0.8.9", features = ["ws", "macros"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 chrono-tz = "0.10.4"

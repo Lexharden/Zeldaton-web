@@ -13,6 +13,13 @@ pub struct Config {
     pub stale_heartbeat_secs: i64,
     /// Dev convenience: when set, the tokens generated on first run are also written here (JSON).
     pub dev_tokens_file: Option<String>,
+    /// First organizer account, created when the users table is empty (ADMIN_USER, default `admin`).
+    pub admin_user: String,
+    /// Its password (ADMIN_PASSWORD, at least 12 chars). Unset: a random one is printed once.
+    pub admin_password: Option<String>,
+    /// COOKIE_SECURE=true|false forces the session cookie's `Secure` flag; unset = automatic
+    /// (Secure everywhere except plain http on localhost, where browsers would drop it).
+    pub cookie_secure: Option<bool>,
 }
 
 impl Config {
@@ -38,6 +45,16 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(20),
             dev_tokens_file: env::var("DEV_TOKENS_FILE").ok().filter(|v| !v.is_empty()),
+            admin_user: env::var("ADMIN_USER")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "admin".into()),
+            admin_password: env::var("ADMIN_PASSWORD").ok().filter(|v| !v.is_empty()),
+            cookie_secure: env::var("COOKIE_SECURE").ok().and_then(|v| match v.as_str() {
+                "true" | "1" => Some(true),
+                "false" | "0" => Some(false),
+                _ => None,
+            }),
         }
     }
 }

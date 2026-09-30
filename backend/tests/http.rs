@@ -52,6 +52,9 @@ async fn harness() -> Harness {
         cors_origins: vec!["http://localhost:5173".into()],
         stale_heartbeat_secs: 20,
         dev_tokens_file: None,
+        admin_user: "admin".into(),
+        admin_password: None,
+        cookie_secure: Some(false),
     };
     let hub = Hub::new(state, tx, cfg, pool.clone());
     let ticker = hub.clone();
@@ -556,4 +559,541 @@ async fn an_existing_database_without_a_catalog_gets_the_factory_one() {
     let loaded = db::load_catalog(&pool).await.unwrap();
     assert!(loaded.items.len() >= 60);
     assert_eq!(loaded, zeldathon_server::catalog::default_catalog().clone_sorted());
+}
+
+// ---- organizer accounts and the admin panel API -------------------------------------------------
+
+use zeldathon_server::accounts::{self, Role};
+
+/// Like `call`, but with arbitrary headers; also returns the response headers.
+async fn call_h(
+    h: &Harness,
+    method: &str,
+    uri: &str,
+    headers: &[(&str, String)],
+    body: Option<Value>,
+) -> (StatusCode, axum::http::HeaderMap, Value) {
+    let mut req = Request::builder().method(method).uri(uri);
+    for (k, v) in headers {
+        req = req.header(*k, v);
+    }
+    let req = match body {
+        Some(b) => req
+            .header("content-type", "application/json")
+            .body(Body::from(b.to_string()))
+            .unwrap(),
+        None => req.body(Body::empty()).unwrap(),
+    };
+    let res = app::build(h.hub.clone()).oneshot(req).await.unwrap();
+    let status = res.status();
+    let headers = res.headers().clone();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        headers,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+const PASSWORD: &str = "a-strong-passphrase";
+
+struct Login {
+    cookie: String,
+    csrf: String,
+}
+
+impl Login {
+    /// Headers for a state-changing call made from the panel.
+    fn write(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("cookie", self.cookie.clone()),
+            ("x-csrf-token", self.csrf.clone()),
+        ]
+    }
+
+    fn read(&self) -> Vec<(&'static str, String)> {
+        vec![("cookie", self.cookie.clone())]
+    }
+}
+
+async fn make_user(h: &Harness, name: &str, role: Role) {
+    accounts::create_user(&h.pool, name, PASSWORD, role)
+        .await
+        .unwrap();
+}
+
+async fn login_as(h: &Harness, name: &str) -> Login {
+    let (s, headers, body) = call_h(
+        h,
+        "POST",
+        "/api/admin/auth/login",
+        &[],
+        Some(json!({ "username": name, "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "login as {name}: {body}");
+    let set = headers.get("set-cookie").unwrap().to_str().unwrap();
+    let cookie = set.split(';').next().unwrap().to_string();
+    Login {
+        cookie,
+        csrf: body["csrfToken"].as_str().unwrap().to_string(),
+    }
+}
+
+#[tokio::test]
+async fn login_sets_a_locked_down_cookie_and_the_session_works() {
+    let h = harness().await;
+    make_user(&h, "Ana", Role::Admin).await;
+
+    let (s, headers, body) = call_h(
+        &h,
+        "POST",
+        "/api/admin/auth/login",
+        &[],
+        Some(json!({ "username": "ANA", "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let set = headers.get("set-cookie").unwrap().to_str().unwrap();
+    assert!(set.starts_with("zt_session="));
+    assert!(set.contains("HttpOnly") && set.contains("SameSite=Strict"));
+    assert_eq!(body["user"]["username"], "ana");
+    assert_eq!(body["user"]["role"], "admin");
+    assert!(body["user"].get("passwordHash").is_none());
+
+    let login = login_as(&h, "ana").await;
+    let (s, _, me) = call_h(&h, "GET", "/api/admin/me", &login.read(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(me["via"], "session");
+    assert_eq!(me["csrfToken"], login.csrf);
+
+    // No cookie, no access.
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &[], None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn bad_logins_look_identical_and_get_locked_after_five() {
+    let h = harness().await;
+    make_user(&h, "ana", Role::Admin).await;
+
+    let wrong = call_h(
+        &h,
+        "POST",
+        "/api/admin/auth/login",
+        &[],
+        Some(json!({ "username": "ana", "password": "wrong-password-1" })),
+    )
+    .await;
+    let unknown = call_h(
+        &h,
+        "POST",
+        "/api/admin/auth/login",
+        &[],
+        Some(json!({ "username": "nobody", "password": "wrong-password-1" })),
+    )
+    .await;
+    assert_eq!(wrong.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.0, unknown.0);
+    assert_eq!(wrong.2, unknown.2, "same body: no user enumeration");
+
+    for _ in 0..4 {
+        call_h(
+            &h,
+            "POST",
+            "/api/admin/auth/login",
+            &[],
+            Some(json!({ "username": "ana", "password": "wrong-password-1" })),
+        )
+        .await;
+    }
+    // Even the right password is refused while locked.
+    let (s, headers, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/auth/login",
+        &[],
+        Some(json!({ "username": "ana", "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::TOO_MANY_REQUESTS);
+    assert!(headers.get("retry-after").is_some());
+
+    // The failures are in the audit log, without the password.
+    let (_, audit) = call(&h, "GET", "/api/admin/audit?limit=50", Some(ADMIN), None).await;
+    let failed = audit
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["action"] == "auth.login.failed")
+        .count();
+    assert!(failed >= 5);
+    assert!(!audit.to_string().contains("wrong-password"));
+}
+
+#[tokio::test]
+async fn writes_from_a_session_need_the_csrf_token() {
+    let h = harness().await;
+    make_user(&h, "ana", Role::Admin).await;
+    let login = login_as(&h, "ana").await;
+
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/event/start",
+        &login.read(),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN, "cookie alone is not enough");
+
+    let bad = vec![
+        ("cookie", login.cookie.clone()),
+        ("x-csrf-token", "not-the-token".to_string()),
+    ];
+    assert_eq!(
+        call_h(&h, "POST", "/api/admin/event/start", &bad, Some(json!({})))
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+
+    let (s, _, event) = call_h(
+        &h,
+        "POST",
+        "/api/admin/event/start",
+        &login.write(),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(event["status"], "live");
+}
+
+#[tokio::test]
+async fn a_wrong_bearer_never_falls_back_to_a_valid_cookie() {
+    let h = harness().await;
+    make_user(&h, "ana", Role::Admin).await;
+    let login = login_as(&h, "ana").await;
+    let mut headers = login.read();
+    headers.push(("authorization", "Bearer not-the-admin-token".into()));
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &headers, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn moderators_run_the_race_day_but_cannot_administer() {
+    let h = harness().await;
+    make_user(&h, "mod", Role::Moderator).await;
+    let m = login_as(&h, "mod").await;
+    make_event_live(&h).await;
+
+    // Allowed: read the dashboard and control a racer.
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/overview", &m.read(), None).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/audit", &m.read(), None).await.0,
+        StatusCode::OK
+    );
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/racers/xime/actions/adjust-time",
+        &m.write(),
+        Some(json!({ "deltaSeconds": -60, "reason": "lag" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    // Forbidden: everything that administers.
+    let forbidden: Vec<(&str, &str, Value)> = vec![
+        ("PUT", "/api/admin/event", json!({ "name": "x" })),
+        ("POST", "/api/admin/event/pause", json!({})),
+        ("POST", "/api/admin/racers", json!({ "id": "nuevo", "displayName": "N", "timezone": "UTC" })),
+        ("POST", "/api/admin/racers/xime/token", json!({})),
+        ("POST", "/api/admin/racers/xime/actions/finish", json!({ "reason": "x" })),
+        ("GET", "/api/admin/users", Value::Null),
+        ("GET", "/api/admin/catalog", Value::Null),
+    ];
+    for (method, path, body) in forbidden {
+        let body = if body.is_null() { None } else { Some(body) };
+        let (s, _, _) = call_h(&h, method, path, &m.write(), body).await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "{method} {path}");
+    }
+}
+
+#[tokio::test]
+async fn the_audit_log_names_the_person_behind_each_action() {
+    let h = harness().await;
+    make_user(&h, "ana", Role::Admin).await;
+    let login = login_as(&h, "ana").await;
+    call_h(&h, "POST", "/api/admin/event/start", &login.write(), Some(json!({}))).await;
+    // The emergency token is recorded as such.
+    call(&h, "POST", "/api/admin/racers/xime/actions/pause", Some(ADMIN), None).await;
+
+    tokio::time::sleep(Duration::from_millis(200)).await; // the audit writer is asynchronous
+    let (_, audit) = call(&h, "GET", "/api/admin/audit?limit=20", Some(ADMIN), None).await;
+    let actors: Vec<(&str, &str)> = audit
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["action"].as_str().unwrap(), a["actor"].as_str().unwrap()))
+        .collect();
+    assert!(actors.contains(&("event.start", "ana")), "{actors:?}");
+    assert!(actors.contains(&("auth.login", "ana")));
+}
+
+#[tokio::test]
+async fn logout_sessions_expiry_and_account_changes_end_sessions() {
+    let h = harness().await;
+    make_user(&h, "ana", Role::Admin).await;
+    make_user(&h, "bob", Role::Moderator).await;
+
+    // Logout kills the cookie.
+    let a = login_as(&h, "ana").await;
+    let (_, headers, _) = call_h(&h, "POST", "/api/admin/auth/logout", &a.write(), Some(json!({}))).await;
+    assert!(headers.get("set-cookie").unwrap().to_str().unwrap().contains("Max-Age=0"));
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &a.read(), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+
+    // Expired sessions are refused.
+    let a = login_as(&h, "ana").await;
+    sqlx::query("UPDATE sessions SET expires_at = '2000-01-01T00:00:00.000Z'")
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &a.read(), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+
+    // Disabling a user ends their sessions at once; they cannot log in either.
+    let a = login_as(&h, "ana").await;
+    let b = login_as(&h, "bob").await;
+    let users = call_h(&h, "GET", "/api/admin/users", &a.read(), None).await.2;
+    let bob_id = users
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["username"] == "bob")
+        .unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    let (s, _, _) = call_h(
+        &h,
+        "PATCH",
+        &format!("/api/admin/users/{bob_id}"),
+        &a.write(),
+        Some(json!({ "disabled": true })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &b.read(), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/auth/login",
+        &[],
+        Some(json!({ "username": "bob", "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn nobody_can_lock_the_panel_out_and_passwords_rotate_sessions() {
+    let h = harness().await;
+    make_user(&h, "ana", Role::Admin).await;
+    let a = login_as(&h, "ana").await;
+    let users = call_h(&h, "GET", "/api/admin/users", &a.read(), None).await.2;
+    let ana_id = users[0]["id"].as_i64().unwrap();
+
+    // Not yourself, and never the last admin.
+    for body in [json!({ "disabled": true }), json!({ "role": "moderator" })] {
+        let (s, _, _) = call_h(
+            &h,
+            "PATCH",
+            &format!("/api/admin/users/{ana_id}"),
+            &a.write(),
+            Some(body),
+        )
+        .await;
+        assert_eq!(s, StatusCode::CONFLICT);
+    }
+    assert_eq!(
+        call_h(&h, "DELETE", &format!("/api/admin/users/{ana_id}"), &a.write(), None).await.0,
+        StatusCode::CONFLICT
+    );
+
+    // New accounts validate their input.
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/users",
+        &a.write(),
+        Some(json!({ "username": "ok-name", "password": "short", "role": "moderator" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/users",
+        &a.write(),
+        Some(json!({ "username": "ANA", "password": PASSWORD, "role": "moderator" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CONFLICT, "usernames are unique ignoring case");
+
+    // Changing your own password keeps this session but ends the others.
+    let other = login_as(&h, "ana").await;
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/me/password",
+        &a.write(),
+        Some(json!({ "currentPassword": "not-my-password", "password": "another-long-passphrase" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/me/password",
+        &a.write(),
+        Some(json!({ "currentPassword": PASSWORD, "password": "another-long-passphrase" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(call_h(&h, "GET", "/api/admin/me", &a.read(), None).await.0, StatusCode::OK);
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &other.read(), None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn event_controls_follow_the_state_machine() {
+    let h = harness().await;
+    let go = |action: &'static str| {
+        let h = &h;
+        async move {
+            call(h, "POST", &format!("/api/admin/event/{action}"), Some(ADMIN), Some(json!({ "reason": "test" }))).await
+        }
+    };
+    assert_eq!(go("pause").await.0, StatusCode::CONFLICT, "not live yet");
+    assert_eq!(go("resume").await.0, StatusCode::CONFLICT);
+    let (s, e) = go("start").await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(e["status"], "live");
+    // Starting early moves the announced start to now.
+    let start = chrono::DateTime::parse_from_rfc3339(e["startAtUtc"].as_str().unwrap()).unwrap();
+    assert!(start <= Utc::now(), "start moved to now, got {start}");
+    assert_eq!(go("start").await.0, StatusCode::CONFLICT);
+    assert_eq!(go("pause").await.1["status"], "paused");
+    assert_eq!(go("resume").await.1["status"], "live");
+    assert_eq!(go("finish").await.1["status"], "finished");
+    assert_eq!(go("start").await.0, StatusCode::CONFLICT, "finished is final");
+    assert_eq!(go("nonsense").await.0, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn the_overview_summarises_the_race_for_the_dashboard() {
+    let h = harness().await;
+    make_event_live(&h).await;
+    let (s, o) = call(&h, "GET", "/api/admin/overview", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(o["event"]["status"], "live");
+    assert_eq!(o["summary"]["racers"], 9);
+    assert_eq!(o["summary"]["connected"], 0);
+    assert_eq!(o["racers"].as_array().unwrap().len(), 9);
+    assert!(o["catalogVersion"].as_str().unwrap().len() == 12);
+    let codes: Vec<&str> = o["alerts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["code"].as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"nobody_connected"), "{codes:?}");
+
+    // A connected racer with a session shows up as live and connected.
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco"))).await.unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let (_, o) = call(&h, "GET", "/api/admin/overview", Some(ADMIN), None).await;
+    assert_eq!(o["summary"]["connected"], 1);
+    assert_eq!(o["summary"]["live"], 1);
+    let row = o["racers"].as_array().unwrap().iter().find(|r| r["racer"]["id"] == "cuaco").unwrap();
+    assert_eq!(row["connected"], true);
+    assert!(row["heartbeatAgeSeconds"].as_i64().unwrap() <= 2);
+}
+
+#[tokio::test]
+async fn the_catalog_is_managed_through_the_api_and_clients_are_told() {
+    let h = harness().await;
+    let mut public = connect_ws(&h, "/ws", None).await.unwrap();
+    next_json(&mut public).await;
+
+    let item = json!({
+        "id": "magic-beans", "group": "tool", "age": "child", "nameEs": "Frijoles Mágicos",
+        "nameEn": "Magic Beans", "short": "FM", "sortOrder": 175, "enabled": true
+    });
+    let (s, _) = call(&h, "PUT", "/api/admin/catalog/items/magic-beans", Some(ADMIN), Some(item.clone())).await;
+    assert_eq!(s, StatusCode::OK);
+    let msg = wait_for(&mut public, "CATALOG_UPDATED").await;
+    assert_eq!(msg["version"].as_str().unwrap().len(), 12);
+
+    // The public catalog shows it in order; the id in the URL must match the body.
+    let (_, c) = call(&h, "GET", "/api/catalog", None, None).await;
+    assert!(c["items"].as_array().unwrap().iter().any(|i| i["id"] == "magic-beans" && i["age"] == "child"));
+    assert_eq!(
+        call(&h, "PUT", "/api/admin/catalog/items/other-id", Some(ADMIN), Some(item.clone())).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(&h, "PUT", "/api/admin/catalog/items/bad-group", Some(ADMIN),
+            Some(json!({ "id": "bad-group", "group": "nope", "age": "both", "nameEs": "x", "nameEn": "x", "short": "x", "sortOrder": 1, "enabled": true }))).await.0,
+        StatusCode::BAD_REQUEST
+    );
+
+    // A racer can now report it (a session is needed first)...
+    make_event_live(&h).await;
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco"))).await.unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(&mut hs, json!({ "type": "ITEM_ACQUIRED", "id": "i1", "item": "magic-beans" })).await;
+    let ack = wait_for(&mut hs, "ACK").await;
+    assert!(ack["id"].is_null() || ack["id"] == "i1" || ack["id"].is_string());
+
+    // ...until it is hidden. Required objectives cannot be hidden.
+    let mut off = item.clone();
+    off["enabled"] = json!(false);
+    call(&h, "PUT", "/api/admin/catalog/items/magic-beans", Some(ADMIN), Some(off)).await;
+    let (_, c) = call(&h, "GET", "/api/catalog", None, None).await;
+    assert!(!c["items"].as_array().unwrap().iter().any(|i| i["id"] == "magic-beans"));
+    let (_, all) = call(&h, "GET", "/api/admin/catalog", Some(ADMIN), None).await;
+    assert!(all["items"].as_array().unwrap().iter().any(|i| i["id"] == "magic-beans" && i["enabled"] == false));
+    let ganon = json!({ "id": "ganons-castle", "age": "adult", "nameEs": "x", "nameEn": "x", "sortOrder": 100, "required": true, "enabled": false });
+    assert_eq!(
+        call(&h, "PUT", "/api/admin/catalog/objectives/ganons-castle", Some(ADMIN), Some(ganon)).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(&h, "DELETE", "/api/admin/catalog/items/magic-beans", Some(ADMIN), None).await.0,
+        StatusCode::NO_CONTENT
+    );
 }

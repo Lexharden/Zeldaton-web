@@ -27,7 +27,13 @@ pub fn build(hub: AppState) -> Router {
             Method::PATCH,
             Method::DELETE,
         ])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::HeaderName::from_static("x-csrf-token"),
+        ])
+        // The panel authenticates with a cookie: only the listed origins may send it.
+        .allow_credentials(true);
 
     Router::new()
         .nest(

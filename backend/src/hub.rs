@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::auth::{constant_eq, hash_token};
+use crate::auth::{LoginLimiter, constant_eq, hash_token};
 use crate::config::Config;
 use crate::db::{AuditRow, PersistOp};
 use crate::domain::*;
@@ -26,6 +26,9 @@ pub struct Hub {
     pub cfg: Config,
     pub pool: sqlx::SqlitePool,
     conns: AtomicU64,
+    /// Failed-login throttles: per username and per client address.
+    pub user_limiter: LoginLimiter,
+    pub ip_limiter: LoginLimiter,
 }
 
 pub type AppState = Arc<Hub>;
@@ -45,6 +48,8 @@ impl Hub {
             cfg,
             pool,
             conns: AtomicU64::new(1),
+            user_limiter: LoginLimiter::new(5, std::time::Duration::from_secs(15 * 60)),
+            ip_limiter: LoginLimiter::new(30, std::time::Duration::from_secs(15 * 60)),
         })
     }
 
@@ -267,9 +272,20 @@ impl Hub {
     // ---- admin --------------------------------------------------------------------------------
 
     pub fn audit(&self, action: &str, racer_id: Option<&str>, payload: serde_json::Value) {
+        self.audit_as("admin", action, racer_id, payload);
+    }
+
+    /// The official session log: who (`actor`: a username or `admin-token`) did what.
+    pub fn audit_as(
+        &self,
+        actor: &str,
+        action: &str,
+        racer_id: Option<&str>,
+        payload: serde_json::Value,
+    ) {
         let _ = self.persist.send(PersistOp::Audit(AuditRow {
             ts: Utc::now(),
-            actor: "admin".into(),
+            actor: actor.into(),
             action: action.into(),
             racer_id: racer_id.map(str::to_string),
             payload,

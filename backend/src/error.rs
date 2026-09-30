@@ -9,6 +9,10 @@ pub enum ApiError {
     NotFound,
     #[error("unauthorized")]
     Unauthorized,
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+    #[error("too many attempts, try again later")]
+    TooManyRequests(u64),
     #[error("bad request: {0}")]
     BadRequest(String),
     #[error("conflict: {0}")]
@@ -22,6 +26,8 @@ impl IntoResponse for ApiError {
         let (status, code) = match &self {
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            ApiError::Forbidden(_) => (StatusCode::FORBIDDEN, "forbidden"),
+            ApiError::TooManyRequests(_) => (StatusCode::TOO_MANY_REQUESTS, "too_many_requests"),
             ApiError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             ApiError::Internal(e) => {
@@ -34,7 +40,13 @@ impl IntoResponse for ApiError {
         } else {
             self.to_string()
         };
-        (status, Json(json!({ "error": code, "message": message }))).into_response()
+        let mut response = (status, Json(json!({ "error": code, "message": message }))).into_response();
+        if let ApiError::TooManyRequests(secs) = self
+            && let Ok(v) = axum::http::HeaderValue::from_str(&secs.to_string())
+        {
+            response.headers_mut().insert(axum::http::header::RETRY_AFTER, v);
+        }
+        response
     }
 }
 
