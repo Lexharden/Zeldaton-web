@@ -45,22 +45,41 @@ impl Fx {
     rename_all_fields = "camelCase"
 )]
 pub enum IngestMsg {
-    Hello { client_version: Option<String> },
-    Heartbeat { game_running: Option<bool> },
+    Hello {
+        client_version: Option<String>,
+    },
+    Heartbeat {
+        game_running: Option<bool>,
+    },
     SessionStarted,
     SessionPaused,
     SessionResumed,
     SessionEnded,
-    GameProgress { progress: GameProgressPatch },
-    ItemAcquired { item: String },
-    AreaChanged { area: String },
-    BossDefeated { boss: String },
-    StatsUpdated { stats: RacerStats },
+    GameProgress {
+        progress: GameProgressPatch,
+    },
+    ItemAcquired {
+        item: String,
+    },
+    AreaChanged {
+        area: String,
+    },
+    BossDefeated {
+        boss: String,
+    },
+    StatsUpdated {
+        stats: RacerStats,
+    },
     GameFinished,
-    ChatEvent { count: Option<u32> },
+    ChatEvent {
+        count: Option<u32>,
+    },
     /// Whether the racer is broadcasting and how many people watch (HiveShock knows: it is
     /// connected to TikTok/Twitch). Valid at any time while connected.
-    StreamState { live: bool, viewers: Option<i64> },
+    StreamState {
+        live: bool,
+        viewers: Option<i64>,
+    },
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -1003,7 +1022,10 @@ impl RaceState {
         item.name_es = item.name_es.trim().to_string();
         item.name_en = item.name_en.trim().to_string();
         item.short = item.short.trim().to_string();
-        item.icon = item.icon.map(|i| i.trim().to_string()).filter(|i| !i.is_empty());
+        item.icon = item
+            .icon
+            .map(|i| i.trim().to_string())
+            .filter(|i| !i.is_empty());
         item.validate()?;
         match self.catalog.items.iter_mut().find(|i| i.id == item.id) {
             Some(existing) => *existing = item.clone(),
@@ -1027,7 +1049,10 @@ impl RaceState {
         Ok(fx)
     }
 
-    pub fn catalog_upsert_objective(&mut self, mut objective: CatalogObjective) -> Result<Fx, String> {
+    pub fn catalog_upsert_objective(
+        &mut self,
+        mut objective: CatalogObjective,
+    ) -> Result<Fx, String> {
         objective.id = objective.id.trim().to_string();
         objective.name_es = objective.name_es.trim().to_string();
         objective.name_en = objective.name_en.trim().to_string();
@@ -1040,7 +1065,10 @@ impl RaceState {
                 .required_objective_ids
                 .contains(&objective.id)
         {
-            return Err("this objective is required by the event rules; remove it from the rules first".into());
+            return Err(
+                "this objective is required by the event rules; remove it from the rules first"
+                    .into(),
+            );
         }
         match self
             .catalog
@@ -1052,14 +1080,24 @@ impl RaceState {
             None => self.catalog.objectives.push(objective.clone()),
         }
         let mut fx = Fx::default();
-        fx.ops.push(PersistOp::CatalogObjective(Box::new(objective)));
+        fx.ops
+            .push(PersistOp::CatalogObjective(Box::new(objective)));
         self.catalog_updated(&mut fx);
         Ok(fx)
     }
 
     pub fn catalog_delete_objective(&mut self, id: &str) -> Result<Fx, String> {
-        if self.event.rules.required_objective_ids.iter().any(|o| o == id) {
-            return Err("this objective is required by the event rules; remove it from the rules first".into());
+        if self
+            .event
+            .rules
+            .required_objective_ids
+            .iter()
+            .any(|o| o == id)
+        {
+            return Err(
+                "this objective is required by the event rules; remove it from the rules first"
+                    .into(),
+            );
         }
         let before = self.catalog.objectives.len();
         self.catalog.objectives.retain(|o| o.id != id);
@@ -1067,7 +1105,8 @@ impl RaceState {
             return Err("objective not found".into());
         }
         let mut fx = Fx::default();
-        fx.ops.push(PersistOp::DeleteCatalogObjective(id.to_string()));
+        fx.ops
+            .push(PersistOp::DeleteCatalogObjective(id.to_string()));
         self.catalog_updated(&mut fx);
         Ok(fx)
     }

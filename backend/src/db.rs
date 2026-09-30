@@ -297,22 +297,23 @@ pub async fn writer(pool: SqlitePool, mut rx: UnboundedReceiver<PersistOp>) {
 
 /// Reads the catalog tables. Empty tables mean "not seeded yet": the factory catalog is used.
 pub async fn load_catalog(pool: &SqlitePool) -> Result<Catalog, sqlx::Error> {
-    let items: Vec<CatalogItem> = sqlx::query("SELECT * FROM catalog_items ORDER BY sort_order, id")
-        .fetch_all(pool)
-        .await?
-        .into_iter()
-        .map(|r| CatalogItem {
-            id: r.get("id"),
-            group: r.get("grp"),
-            age: Age::parse(&r.get::<String, _>("age")),
-            name_es: r.get("name_es"),
-            name_en: r.get("name_en"),
-            short: r.get("short"),
-            icon: r.get("icon"),
-            sort_order: r.get("sort_order"),
-            enabled: r.get::<i64, _>("enabled") != 0,
-        })
-        .collect();
+    let items: Vec<CatalogItem> =
+        sqlx::query("SELECT * FROM catalog_items ORDER BY sort_order, id")
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .map(|r| CatalogItem {
+                id: r.get("id"),
+                group: r.get("grp"),
+                age: Age::parse(&r.get::<String, _>("age")),
+                name_es: r.get("name_es"),
+                name_en: r.get("name_en"),
+                short: r.get("short"),
+                icon: r.get("icon"),
+                sort_order: r.get("sort_order"),
+                enabled: r.get::<i64, _>("enabled") != 0,
+            })
+            .collect();
     let objectives: Vec<CatalogObjective> =
         sqlx::query("SELECT * FROM catalog_objectives ORDER BY sort_order, id")
             .fetch_all(pool)

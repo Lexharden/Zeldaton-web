@@ -420,7 +420,10 @@ fn stream_stays_live_while_playing_even_if_the_broadcast_is_reported_off() {
 fn losing_hiveshock_clears_the_reported_viewers() {
     let mut s = state(t0());
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-    s.attach_ingest("ralbat", zeldathon_server::state::IngestHandle { conn_id: 1, tx });
+    s.attach_ingest(
+        "ralbat",
+        zeldathon_server::state::IngestHandle { conn_id: 1, tx },
+    );
     ingest(
         &mut s,
         "ralbat",
@@ -463,7 +466,13 @@ fn the_factory_catalog_is_loaded_and_ingest_accepts_the_new_items() {
     assert!(s.catalog.items.len() >= 60);
     start(&mut s, "ralbat", t0());
     // Items that did not exist before the catalog grew.
-    for item in ["kokiri-sword", "hover-boots", "nayrus-love", "forest-medallion", "zeldas-lullaby"] {
+    for item in [
+        "kokiri-sword",
+        "hover-boots",
+        "nayrus-love",
+        "forest-medallion",
+        "zeldas-lullaby",
+    ] {
         ingest(
             &mut s,
             "ralbat",
@@ -531,7 +540,13 @@ fn a_new_catalog_item_is_reportable_and_a_disabled_one_is_not() {
         .code(),
         "invalid"
     );
-    assert!(!s.catalog.public().items.iter().any(|i| i.id == "magic-beans"));
+    assert!(
+        !s.catalog
+            .public()
+            .items
+            .iter()
+            .any(|i| i.id == "magic-beans")
+    );
 }
 
 #[test]
@@ -614,6 +629,10 @@ fn stats_carry_the_current_link_age() {
     )
     .unwrap();
     let stats = s.view(s.idx("ralbat").unwrap(), t0()).stats.unwrap();
-    assert_eq!(stats.age, Some(LinkAge::Child), "a partial update keeps the age");
+    assert_eq!(
+        stats.age,
+        Some(LinkAge::Child),
+        "a partial update keeps the age"
+    );
     assert_eq!(stats.hearts, Some(3.0));
 }

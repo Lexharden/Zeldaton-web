@@ -50,11 +50,13 @@ impl Config {
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| "admin".into()),
             admin_password: env::var("ADMIN_PASSWORD").ok().filter(|v| !v.is_empty()),
-            cookie_secure: env::var("COOKIE_SECURE").ok().and_then(|v| match v.as_str() {
-                "true" | "1" => Some(true),
-                "false" | "0" => Some(false),
-                _ => None,
-            }),
+            cookie_secure: env::var("COOKIE_SECURE")
+                .ok()
+                .and_then(|v| match v.as_str() {
+                    "true" | "1" => Some(true),
+                    "false" | "0" => Some(false),
+                    _ => None,
+                }),
         }
     }
 }

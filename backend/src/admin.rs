@@ -66,10 +66,7 @@ pub fn router(hub: AppState) -> Router<AppState> {
         .route("/users/{id}", patch(update_user).delete(delete_user))
         .route("/users/{id}/password", post(reset_password))
         .route("/catalog", get(catalog_all))
-        .route(
-            "/catalog/items/{id}",
-            put(put_item).delete(delete_item),
-        )
+        .route("/catalog/items/{id}", put(put_item).delete(delete_item))
         .route(
             "/catalog/objectives/{id}",
             put(put_objective).delete(delete_objective),
@@ -257,7 +254,10 @@ async fn logout(
     hub.audit_as(&p.actor, "auth.logout", None, json!({}));
     Ok((
         StatusCode::OK,
-        [(SET_COOKIE, clear_session_cookie(cookie_secure(&hub, &headers)))],
+        [(
+            SET_COOKIE,
+            clear_session_cookie(cookie_secure(&hub, &headers)),
+        )],
         Json(json!({ "ok": true })),
     )
         .into_response())
@@ -321,7 +321,11 @@ async fn list_users(
     Extension(p): Extension<Principal>,
 ) -> Result<Json<Vec<accounts::User>>, ApiError> {
     p.require(Role::Admin)?;
-    Ok(Json(accounts::list_users(&hub.pool).await.map_err(account_error)?))
+    Ok(Json(
+        accounts::list_users(&hub.pool)
+            .await
+            .map_err(account_error)?,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -387,7 +391,9 @@ async fn delete_user(
 ) -> Result<StatusCode, ApiError> {
     p.require(Role::Admin)?;
     if p.user_id == Some(id) {
-        return Err(ApiError::Conflict("you cannot delete your own account".into()));
+        return Err(ApiError::Conflict(
+            "you cannot delete your own account".into(),
+        ));
     }
     let name = accounts::find_by_id(&hub.pool, id)
         .await
@@ -421,7 +427,12 @@ async fn reset_password(
     accounts::set_password(&hub.pool, id, &b.password, keep)
         .await
         .map_err(account_error)?;
-    hub.audit_as(&p.actor, "user.password.reset", None, json!({ "userId": id }));
+    hub.audit_as(
+        &p.actor,
+        "user.password.reset",
+        None,
+        json!({ "userId": id }),
+    );
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -566,7 +577,11 @@ async fn overview(State(hub): State<AppState>) -> Json<Value> {
                 "warn",
                 "weak_signal",
                 Some(racer),
-                format!("{} has not sent a heartbeat for {}s.", racer.display_name, age.unwrap_or(0)),
+                format!(
+                    "{} has not sent a heartbeat for {}s.",
+                    racer.display_name,
+                    age.unwrap_or(0)
+                ),
             ));
         }
     }
@@ -763,10 +778,18 @@ async fn put_item(
 ) -> Result<Json<CatalogItem>, ApiError> {
     p.require(Role::Admin)?;
     if item.id != id {
-        return Err(ApiError::BadRequest("the id in the body must match the URL".into()));
+        return Err(ApiError::BadRequest(
+            "the id in the body must match the URL".into(),
+        ));
     }
-    hub.catalog_upsert_item(item.clone(), Utc::now()).map_err(bad)?;
-    hub.audit_as(&p.actor, "catalog.item.save", None, json!({ "id": id, "enabled": item.enabled }));
+    hub.catalog_upsert_item(item.clone(), Utc::now())
+        .map_err(bad)?;
+    hub.audit_as(
+        &p.actor,
+        "catalog.item.save",
+        None,
+        json!({ "id": id, "enabled": item.enabled }),
+    );
     Ok(Json(item))
 }
 
@@ -789,7 +812,9 @@ async fn put_objective(
 ) -> Result<Json<CatalogObjective>, ApiError> {
     p.require(Role::Admin)?;
     if objective.id != id {
-        return Err(ApiError::BadRequest("the id in the body must match the URL".into()));
+        return Err(ApiError::BadRequest(
+            "the id in the body must match the URL".into(),
+        ));
     }
     hub.catalog_upsert_objective(objective.clone(), Utc::now())
         .map_err(bad)?;
@@ -809,7 +834,12 @@ async fn delete_objective(
 ) -> Result<StatusCode, ApiError> {
     p.require(Role::Admin)?;
     hub.catalog_delete_objective(&id, Utc::now()).map_err(bad)?;
-    hub.audit_as(&p.actor, "catalog.objective.delete", None, json!({ "id": id }));
+    hub.audit_as(
+        &p.actor,
+        "catalog.objective.delete",
+        None,
+        json!({ "id": id }),
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 

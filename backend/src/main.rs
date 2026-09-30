@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use chrono::Utc;
 use tokio::sync::mpsc::unbounded_channel;
-use zeldathon_server::config::Config;
 use zeldathon_server::accounts::{self, MIN_PASSWORD_LEN, Role};
 use zeldathon_server::auth::random_token;
+use zeldathon_server::config::Config;
 use zeldathon_server::hub::Hub;
 use zeldathon_server::{app, db, seed};
 
@@ -52,7 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(p) if p.chars().count() >= MIN_PASSWORD_LEN => (p, false),
             other => {
                 if other.is_some() {
-                    tracing::warn!("ADMIN_PASSWORD is shorter than {MIN_PASSWORD_LEN} characters; ignoring it");
+                    tracing::warn!(
+                        "ADMIN_PASSWORD is shorter than {MIN_PASSWORD_LEN} characters; ignoring it"
+                    );
                 }
                 (random_token()[..20].to_string(), true)
             }

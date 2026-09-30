@@ -558,7 +558,10 @@ async fn an_existing_database_without_a_catalog_gets_the_factory_one() {
     assert!(!db::ensure_catalog(&pool).await.unwrap(), "never again");
     let loaded = db::load_catalog(&pool).await.unwrap();
     assert!(loaded.items.len() >= 60);
-    assert_eq!(loaded, zeldathon_server::catalog::default_catalog().clone_sorted());
+    assert_eq!(
+        loaded,
+        zeldathon_server::catalog::default_catalog().clone_sorted()
+    );
 }
 
 // ---- organizer accounts and the admin panel API -------------------------------------------------
@@ -794,11 +797,15 @@ async fn moderators_run_the_race_day_but_cannot_administer() {
 
     // Allowed: read the dashboard and control a racer.
     assert_eq!(
-        call_h(&h, "GET", "/api/admin/overview", &m.read(), None).await.0,
+        call_h(&h, "GET", "/api/admin/overview", &m.read(), None)
+            .await
+            .0,
         StatusCode::OK
     );
     assert_eq!(
-        call_h(&h, "GET", "/api/admin/audit", &m.read(), None).await.0,
+        call_h(&h, "GET", "/api/admin/audit", &m.read(), None)
+            .await
+            .0,
         StatusCode::OK
     );
     let (s, _, _) = call_h(
@@ -815,9 +822,17 @@ async fn moderators_run_the_race_day_but_cannot_administer() {
     let forbidden: Vec<(&str, &str, Value)> = vec![
         ("PUT", "/api/admin/event", json!({ "name": "x" })),
         ("POST", "/api/admin/event/pause", json!({})),
-        ("POST", "/api/admin/racers", json!({ "id": "nuevo", "displayName": "N", "timezone": "UTC" })),
+        (
+            "POST",
+            "/api/admin/racers",
+            json!({ "id": "nuevo", "displayName": "N", "timezone": "UTC" }),
+        ),
         ("POST", "/api/admin/racers/xime/token", json!({})),
-        ("POST", "/api/admin/racers/xime/actions/finish", json!({ "reason": "x" })),
+        (
+            "POST",
+            "/api/admin/racers/xime/actions/finish",
+            json!({ "reason": "x" }),
+        ),
         ("GET", "/api/admin/users", Value::Null),
         ("GET", "/api/admin/catalog", Value::Null),
     ];
@@ -833,9 +848,23 @@ async fn the_audit_log_names_the_person_behind_each_action() {
     let h = harness().await;
     make_user(&h, "ana", Role::Admin).await;
     let login = login_as(&h, "ana").await;
-    call_h(&h, "POST", "/api/admin/event/start", &login.write(), Some(json!({}))).await;
+    call_h(
+        &h,
+        "POST",
+        "/api/admin/event/start",
+        &login.write(),
+        Some(json!({})),
+    )
+    .await;
     // The emergency token is recorded as such.
-    call(&h, "POST", "/api/admin/racers/xime/actions/pause", Some(ADMIN), None).await;
+    call(
+        &h,
+        "POST",
+        "/api/admin/racers/xime/actions/pause",
+        Some(ADMIN),
+        None,
+    )
+    .await;
 
     tokio::time::sleep(Duration::from_millis(200)).await; // the audit writer is asynchronous
     let (_, audit) = call(&h, "GET", "/api/admin/audit?limit=20", Some(ADMIN), None).await;
@@ -857,8 +886,22 @@ async fn logout_sessions_expiry_and_account_changes_end_sessions() {
 
     // Logout kills the cookie.
     let a = login_as(&h, "ana").await;
-    let (_, headers, _) = call_h(&h, "POST", "/api/admin/auth/logout", &a.write(), Some(json!({}))).await;
-    assert!(headers.get("set-cookie").unwrap().to_str().unwrap().contains("Max-Age=0"));
+    let (_, headers, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/auth/logout",
+        &a.write(),
+        Some(json!({})),
+    )
+    .await;
+    assert!(
+        headers
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Max-Age=0")
+    );
     assert_eq!(
         call_h(&h, "GET", "/api/admin/me", &a.read(), None).await.0,
         StatusCode::UNAUTHORIZED
@@ -878,7 +921,9 @@ async fn logout_sessions_expiry_and_account_changes_end_sessions() {
     // Disabling a user ends their sessions at once; they cannot log in either.
     let a = login_as(&h, "ana").await;
     let b = login_as(&h, "bob").await;
-    let users = call_h(&h, "GET", "/api/admin/users", &a.read(), None).await.2;
+    let users = call_h(&h, "GET", "/api/admin/users", &a.read(), None)
+        .await
+        .2;
     let bob_id = users
         .as_array()
         .unwrap()
@@ -916,7 +961,9 @@ async fn nobody_can_lock_the_panel_out_and_passwords_rotate_sessions() {
     let h = harness().await;
     make_user(&h, "ana", Role::Admin).await;
     let a = login_as(&h, "ana").await;
-    let users = call_h(&h, "GET", "/api/admin/users", &a.read(), None).await.2;
+    let users = call_h(&h, "GET", "/api/admin/users", &a.read(), None)
+        .await
+        .2;
     let ana_id = users[0]["id"].as_i64().unwrap();
 
     // Not yourself, and never the last admin.
@@ -932,7 +979,15 @@ async fn nobody_can_lock_the_panel_out_and_passwords_rotate_sessions() {
         assert_eq!(s, StatusCode::CONFLICT);
     }
     assert_eq!(
-        call_h(&h, "DELETE", &format!("/api/admin/users/{ana_id}"), &a.write(), None).await.0,
+        call_h(
+            &h,
+            "DELETE",
+            &format!("/api/admin/users/{ana_id}"),
+            &a.write(),
+            None
+        )
+        .await
+        .0,
         StatusCode::CONFLICT
     );
 
@@ -954,7 +1009,11 @@ async fn nobody_can_lock_the_panel_out_and_passwords_rotate_sessions() {
         Some(json!({ "username": "ANA", "password": PASSWORD, "role": "moderator" })),
     )
     .await;
-    assert_eq!(s, StatusCode::CONFLICT, "usernames are unique ignoring case");
+    assert_eq!(
+        s,
+        StatusCode::CONFLICT,
+        "usernames are unique ignoring case"
+    );
 
     // Changing your own password keeps this session but ends the others.
     let other = login_as(&h, "ana").await;
@@ -963,7 +1022,9 @@ async fn nobody_can_lock_the_panel_out_and_passwords_rotate_sessions() {
         "POST",
         "/api/admin/me/password",
         &a.write(),
-        Some(json!({ "currentPassword": "not-my-password", "password": "another-long-passphrase" })),
+        Some(
+            json!({ "currentPassword": "not-my-password", "password": "another-long-passphrase" }),
+        ),
     )
     .await;
     assert_eq!(s, StatusCode::FORBIDDEN);
@@ -976,9 +1037,14 @@ async fn nobody_can_lock_the_panel_out_and_passwords_rotate_sessions() {
     )
     .await;
     assert_eq!(s, StatusCode::OK);
-    assert_eq!(call_h(&h, "GET", "/api/admin/me", &a.read(), None).await.0, StatusCode::OK);
     assert_eq!(
-        call_h(&h, "GET", "/api/admin/me", &other.read(), None).await.0,
+        call_h(&h, "GET", "/api/admin/me", &a.read(), None).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call_h(&h, "GET", "/api/admin/me", &other.read(), None)
+            .await
+            .0,
         StatusCode::UNAUTHORIZED
     );
 }
@@ -989,7 +1055,14 @@ async fn event_controls_follow_the_state_machine() {
     let go = |action: &'static str| {
         let h = &h;
         async move {
-            call(h, "POST", &format!("/api/admin/event/{action}"), Some(ADMIN), Some(json!({ "reason": "test" }))).await
+            call(
+                h,
+                "POST",
+                &format!("/api/admin/event/{action}"),
+                Some(ADMIN),
+                Some(json!({ "reason": "test" })),
+            )
+            .await
         }
     };
     assert_eq!(go("pause").await.0, StatusCode::CONFLICT, "not live yet");
@@ -1004,7 +1077,11 @@ async fn event_controls_follow_the_state_machine() {
     assert_eq!(go("pause").await.1["status"], "paused");
     assert_eq!(go("resume").await.1["status"], "live");
     assert_eq!(go("finish").await.1["status"], "finished");
-    assert_eq!(go("start").await.0, StatusCode::CONFLICT, "finished is final");
+    assert_eq!(
+        go("start").await.0,
+        StatusCode::CONFLICT,
+        "finished is final"
+    );
     assert_eq!(go("nonsense").await.0, StatusCode::CONFLICT);
 }
 
@@ -1028,7 +1105,9 @@ async fn the_overview_summarises_the_race_for_the_dashboard() {
     assert!(codes.contains(&"nobody_connected"), "{codes:?}");
 
     // A connected racer with a session shows up as live and connected.
-    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco"))).await.unwrap();
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
     send(&mut hs, json!({ "type": "HELLO" })).await;
     wait_for(&mut hs, "CLOCK").await;
     send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
@@ -1036,7 +1115,12 @@ async fn the_overview_summarises_the_race_for_the_dashboard() {
     let (_, o) = call(&h, "GET", "/api/admin/overview", Some(ADMIN), None).await;
     assert_eq!(o["summary"]["connected"], 1);
     assert_eq!(o["summary"]["live"], 1);
-    let row = o["racers"].as_array().unwrap().iter().find(|r| r["racer"]["id"] == "cuaco").unwrap();
+    let row = o["racers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["racer"]["id"] == "cuaco")
+        .unwrap();
     assert_eq!(row["connected"], true);
     assert!(row["heartbeatAgeSeconds"].as_i64().unwrap() <= 2);
 }
@@ -1051,16 +1135,37 @@ async fn the_catalog_is_managed_through_the_api_and_clients_are_told() {
         "id": "magic-beans", "group": "tool", "age": "child", "nameEs": "Frijoles Mágicos",
         "nameEn": "Magic Beans", "short": "FM", "sortOrder": 175, "enabled": true
     });
-    let (s, _) = call(&h, "PUT", "/api/admin/catalog/items/magic-beans", Some(ADMIN), Some(item.clone())).await;
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/catalog/items/magic-beans",
+        Some(ADMIN),
+        Some(item.clone()),
+    )
+    .await;
     assert_eq!(s, StatusCode::OK);
     let msg = wait_for(&mut public, "CATALOG_UPDATED").await;
     assert_eq!(msg["version"].as_str().unwrap().len(), 12);
 
     // The public catalog shows it in order; the id in the URL must match the body.
     let (_, c) = call(&h, "GET", "/api/catalog", None, None).await;
-    assert!(c["items"].as_array().unwrap().iter().any(|i| i["id"] == "magic-beans" && i["age"] == "child"));
+    assert!(
+        c["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["id"] == "magic-beans" && i["age"] == "child")
+    );
     assert_eq!(
-        call(&h, "PUT", "/api/admin/catalog/items/other-id", Some(ADMIN), Some(item.clone())).await.0,
+        call(
+            &h,
+            "PUT",
+            "/api/admin/catalog/items/other-id",
+            Some(ADMIN),
+            Some(item.clone())
+        )
+        .await
+        .0,
         StatusCode::BAD_REQUEST
     );
     assert_eq!(
@@ -1071,29 +1176,70 @@ async fn the_catalog_is_managed_through_the_api_and_clients_are_told() {
 
     // A racer can now report it (a session is needed first)...
     make_event_live(&h).await;
-    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco"))).await.unwrap();
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
     send(&mut hs, json!({ "type": "HELLO" })).await;
     wait_for(&mut hs, "CLOCK").await;
     send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
-    send(&mut hs, json!({ "type": "ITEM_ACQUIRED", "id": "i1", "item": "magic-beans" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "ITEM_ACQUIRED", "id": "i1", "item": "magic-beans" }),
+    )
+    .await;
     let ack = wait_for(&mut hs, "ACK").await;
     assert!(ack["id"].is_null() || ack["id"] == "i1" || ack["id"].is_string());
 
     // ...until it is hidden. Required objectives cannot be hidden.
     let mut off = item.clone();
     off["enabled"] = json!(false);
-    call(&h, "PUT", "/api/admin/catalog/items/magic-beans", Some(ADMIN), Some(off)).await;
+    call(
+        &h,
+        "PUT",
+        "/api/admin/catalog/items/magic-beans",
+        Some(ADMIN),
+        Some(off),
+    )
+    .await;
     let (_, c) = call(&h, "GET", "/api/catalog", None, None).await;
-    assert!(!c["items"].as_array().unwrap().iter().any(|i| i["id"] == "magic-beans"));
+    assert!(
+        !c["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["id"] == "magic-beans")
+    );
     let (_, all) = call(&h, "GET", "/api/admin/catalog", Some(ADMIN), None).await;
-    assert!(all["items"].as_array().unwrap().iter().any(|i| i["id"] == "magic-beans" && i["enabled"] == false));
+    assert!(
+        all["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["id"] == "magic-beans" && i["enabled"] == false)
+    );
     let ganon = json!({ "id": "ganons-castle", "age": "adult", "nameEs": "x", "nameEn": "x", "sortOrder": 100, "required": true, "enabled": false });
     assert_eq!(
-        call(&h, "PUT", "/api/admin/catalog/objectives/ganons-castle", Some(ADMIN), Some(ganon)).await.0,
+        call(
+            &h,
+            "PUT",
+            "/api/admin/catalog/objectives/ganons-castle",
+            Some(ADMIN),
+            Some(ganon)
+        )
+        .await
+        .0,
         StatusCode::BAD_REQUEST
     );
     assert_eq!(
-        call(&h, "DELETE", "/api/admin/catalog/items/magic-beans", Some(ADMIN), None).await.0,
+        call(
+            &h,
+            "DELETE",
+            "/api/admin/catalog/items/magic-beans",
+            Some(ADMIN),
+            None
+        )
+        .await
+        .0,
         StatusCode::NO_CONTENT
     );
 }

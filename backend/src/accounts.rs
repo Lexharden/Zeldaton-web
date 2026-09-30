@@ -195,10 +195,12 @@ pub async fn find_for_login(
 }
 
 pub async fn password_hash_of(pool: &SqlitePool, id: i64) -> Result<Option<String>, AccountError> {
-    Ok(sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 pub async fn list_users(pool: &SqlitePool) -> Result<Vec<User>, AccountError> {
@@ -345,7 +347,8 @@ pub async fn session_user(
     };
     let last_seen = parse_dt(&r.get::<String, _>("last_seen_at"));
     if now - last_seen > Duration::seconds(60) {
-        let next = (now + Duration::hours(SESSION_IDLE_HOURS)).min(created + Duration::days(SESSION_MAX_DAYS));
+        let next = (now + Duration::hours(SESSION_IDLE_HOURS))
+            .min(created + Duration::days(SESSION_MAX_DAYS));
         sqlx::query("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?")
             .bind(rfc(now))
             .bind(rfc(next))

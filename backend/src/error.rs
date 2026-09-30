@@ -40,11 +40,14 @@ impl IntoResponse for ApiError {
         } else {
             self.to_string()
         };
-        let mut response = (status, Json(json!({ "error": code, "message": message }))).into_response();
+        let mut response =
+            (status, Json(json!({ "error": code, "message": message }))).into_response();
         if let ApiError::TooManyRequests(secs) = self
             && let Ok(v) = axum::http::HeaderValue::from_str(&secs.to_string())
         {
-            response.headers_mut().insert(axum::http::header::RETRY_AFTER, v);
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, v);
         }
         response
     }
