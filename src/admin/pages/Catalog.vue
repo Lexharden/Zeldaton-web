@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { t } from '@/i18n'
 import AgeBadge from '@/components/common/AgeBadge.vue'
 import { AGE_ORDER, GROUP_ORDER } from '@/utils/catalog'
+import { itemIconUrl, validIconName } from '@/utils/media'
 import type { CatalogAge, CatalogItem, CatalogObjective } from '@/types/catalog'
 import { adminApi } from '../api/AdminApi'
 import { confirm } from '../composables/useConfirm'
 import { messageOf, useToasts } from '../composables/useToasts'
+import MediaPicker from '../components/MediaPicker.vue'
 import Modal from '../components/Modal.vue'
 import PageHeader from '../components/PageHeader.vue'
 
@@ -16,6 +18,7 @@ const tab = ref<'items' | 'objectives'>('items')
 const items = ref<CatalogItem[]>([])
 const objectives = ref<CatalogObjective[]>([])
 const version = ref('')
+const pickerOpen = ref(false)
 
 async function load() {
   try {
@@ -134,8 +137,9 @@ const itemFormError = computed(() => {
     return 'Ya existe un ítem con ese identificador.'
   if (!f.nameEs.trim() || !f.nameEn.trim()) return 'Falta el nombre en español o inglés.'
   if (!f.short.trim() || f.short.trim().length > 4) return 'La abreviatura es de 1 a 4 caracteres.'
-  if (f.icon && !/^(\/|https:\/\/)/.test(f.icon))
-    return 'El icono es una ruta del sitio (/art/…) o una URL https.'
+  // Older items may still hold a site path or an https URL; new ones are just a file name.
+  if (f.icon && !/^(\/|https:\/\/)/.test(f.icon) && !validIconName(f.icon.trim()))
+    return "El icono es el nombre de un archivo (Hookshot-Art.png): letras, números, espacios y _ - . ' ( ), terminado en .png, .jpg o .webp."
   return ''
 })
 const objectiveFormError = computed(() => {
@@ -322,6 +326,9 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
         <label class="flex items-center gap-2 text-sm text-muted"
           ><input v-model="showHidden" type="checkbox" />Mostrar ocultos</label
         >
+        <button v-if="tab === 'items'" type="button" class="a-btn" @click="pickerOpen = true">
+          <ImageIcon class="size-4" />Imágenes
+        </button>
       </div>
     </div>
 
@@ -362,7 +369,12 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
               </td>
               <td>
                 <div class="flex items-center gap-3">
-                  <img v-if="i.icon" :src="i.icon" alt="" class="size-8 object-contain" />
+                  <img
+                    v-if="i.icon"
+                    :src="itemIconUrl(i.icon)"
+                    alt=""
+                    class="size-8 object-contain"
+                  />
                   <span
                     v-else
                     class="num grid size-8 place-items-center rounded bg-white/5 text-sm font-bold text-white"
@@ -553,13 +565,26 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
-            <label class="a-label" for="it-icon">Icono (opcional)</label
-            ><input
-              id="it-icon"
-              v-model="itemForm.icon"
-              class="a-input"
-              placeholder="/art/items/magic-beans.png"
-            />
+            <label class="a-label" for="it-icon">Icono (opcional)</label>
+            <div class="flex items-center gap-2">
+              <img
+                v-if="itemForm.icon && !itemFormError.startsWith('El icono')"
+                :src="itemIconUrl(itemForm.icon.trim())"
+                alt=""
+                class="size-10 shrink-0 rounded bg-white/5 object-contain"
+              />
+              <input
+                id="it-icon"
+                v-model="itemForm.icon"
+                class="a-input"
+                placeholder="Hookshot-Art.png"
+                autocomplete="off"
+              />
+              <button type="button" class="a-btn shrink-0" @click="pickerOpen = true">
+                <ImageIcon class="size-4" />Elegir
+              </button>
+            </div>
+            <p class="a-hint">Solo el nombre del archivo. Elige una imagen o sube una nueva.</p>
           </div>
           <div>
             <label class="a-label" for="it-order">Orden</label
@@ -584,6 +609,20 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
         </div>
       </form>
     </Modal>
+
+    <MediaPicker
+      :open="pickerOpen"
+      :selected="itemForm?.icon"
+      @close="pickerOpen = false"
+      @pick="
+        (name) => {
+          if (itemForm) {
+            itemForm.icon = name
+            pickerOpen = false
+          }
+        }
+      "
+    />
 
     <Modal
       :open="!!objectiveForm"

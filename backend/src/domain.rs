@@ -134,6 +134,9 @@ pub struct EventInfo {
     /// How much time viewer donations may add or remove (the streamer sets the rate in HiveShock).
     #[serde(default)]
     pub donation_time: DonationTimePolicy,
+    /// Test run: the site shows a notice and the organizer can reset everything before the real event.
+    #[serde(default)]
+    pub rehearsal: bool,
 }
 
 /// Organizer limits for time from donations. HiveShock converts TikTok diamonds / Twitch bits into
@@ -500,6 +503,9 @@ pub enum WsMessage {
     CatalogUpdated {
         version: String,
     },
+    /// The event itself changed in a way live patches cannot express (reset, rehearsal switched):
+    /// clients reload everything.
+    EventUpdated,
 }
 
 /// Wire frame: the message plus a top-level `serverTimeUtc`, which the frontend socket

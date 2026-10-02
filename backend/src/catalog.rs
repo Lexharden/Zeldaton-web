@@ -113,9 +113,11 @@ impl CatalogItem {
             return Err("short is required and limited to 4 characters".into());
         }
         if let Some(icon) = &self.icon
-            && (icon.len() > 200 || !(icon.starts_with('/') || icon.starts_with("https://")))
+            && !(crate::media::valid_name(icon)
+                // Older items may still hold a site path or an https URL.
+                || (icon.len() <= 200 && (icon.starts_with('/') || icon.starts_with("https://"))))
         {
-            return Err("icon must be a site path (/art/...) or an https URL".into());
+            return Err("icon must be a picture file name (e.g. Hookshot-Art.png)".into());
         }
         Ok(())
     }

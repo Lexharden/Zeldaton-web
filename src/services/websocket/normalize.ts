@@ -18,6 +18,7 @@ const KNOWN: ReadonlySet<WsMessageType> = new Set<WsMessageType>([
   'RACER_STATUS_CHANGED',
   'STREAM_UPDATED',
   'CATALOG_UPDATED',
+  'EVENT_UPDATED',
   'LIVE_ACTIVITY',
   'HIVESHOCK_STATS_UPDATED',
 ])

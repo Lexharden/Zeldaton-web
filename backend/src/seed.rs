@@ -44,6 +44,7 @@ pub fn default_event() -> EventInfo {
             required_objective_ids: default_catalog().default_required(),
         },
         donation_time: DonationTimePolicy::default(),
+        rehearsal: false,
     }
 }
 

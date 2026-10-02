@@ -9,12 +9,14 @@ import { adminApi } from '../api/AdminApi'
 import { isoToLocalInput, localInputToIso, shortDuration } from '../format'
 import { messageOf, useToasts } from '../composables/useToasts'
 import EventControls from '../components/EventControls.vue'
+import ResetEventDialog from '../components/ResetEventDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 
 const toasts = useToasts()
 const event = ref<EventInfo | null>(null)
 const objectives = ref<CatalogObjective[]>([])
 const busy = ref(false)
+const resetOpen = ref(false)
 
 /** Same defaults as the backend (DonationTimePolicy::default). */
 const DEFAULT_DONATIONS: DonationTimePolicy = {
@@ -73,6 +75,7 @@ const form = ref({
   reset: '06:00',
   winCondition: '',
   required: [] as string[],
+  rehearsal: false,
 })
 
 async function load() {
@@ -90,6 +93,7 @@ async function load() {
       reset: e.dailyResetLocalTime,
       winCondition: e.rules.winCondition,
       required: [...e.rules.requiredObjectiveIds],
+      rehearsal: !!e.rehearsal,
     }
     loadDonations(e.donationTime)
   } catch (e) {
@@ -97,6 +101,17 @@ async function load() {
   }
 }
 onMounted(load)
+
+/** A real event that is running can never be reset; a rehearsal can, at any moment. */
+const canReset = computed(
+  () => !!event.value && (event.value.rehearsal || event.value.status !== 'live'),
+)
+
+function onReset(next: EventInfo) {
+  resetOpen.value = false
+  event.value = next
+  void load()
+}
 
 const budgetSeconds = computed(() => form.value.hours * 3600 + form.value.minutes * 60)
 const budgetError = computed(() =>
@@ -131,6 +146,7 @@ async function save() {
       winCondition: form.value.winCondition.trim(),
       requiredObjectiveIds: form.value.required,
       donationTime: donationPolicy.value,
+      rehearsal: form.value.rehearsal,
     })
     toasts.success('Evento guardado.')
   } catch (e) {
@@ -145,6 +161,11 @@ async function save() {
   <div>
     <PageHeader title="Evento" subtitle="Fechas, tiempo diario y reglas de la carrera.">
       <LiveBadge v-if="event" :status="event.status" />
+      <span
+        v-if="event?.rehearsal"
+        class="hud-label rounded border border-warning/60 px-2 py-1 text-warning"
+        >ENSAYO</span
+      >
       <EventControls v-if="event" :status="event.status" @changed="load" />
     </PageHeader>
 
@@ -305,6 +326,40 @@ async function save() {
         </div>
       </section>
 
+      <section class="panel xl:col-span-2">
+        <div class="space-y-4 p-5">
+          <h2 class="hud-label">ENSAYO Y REINICIO</h2>
+          <label class="flex items-start gap-2 text-sm">
+            <input v-model="form.rehearsal" type="checkbox" class="mt-1" />
+            <span
+              ><span class="text-white">Modo ensayo</span><br /><span class="a-hint"
+                >Los corredores prueban con HiveShock de verdad. La web muestra un aviso de que son
+                datos de prueba y, mientras esté activo, el evento se puede reiniciar aunque esté en
+                vivo. Se apaga al reiniciar para el evento real. No se puede activar con el evento
+                en vivo: pausa primero. Se aplica al guardar.</span
+              ></span
+            >
+          </label>
+          <div class="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+            <button
+              type="button"
+              class="a-btn a-btn-danger"
+              :disabled="!canReset"
+              @click="resetOpen = true"
+            >
+              Reiniciar evento…
+            </button>
+            <p v-if="canReset" class="a-hint">
+              Borra todo lo de las pruebas y deja corredores, tokens y catálogo para empezar de
+              cero.
+            </p>
+            <p v-else class="a-hint">
+              Un evento real en vivo no se puede reiniciar. Pausa o finaliza el evento primero.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <div class="flex justify-end gap-3 xl:col-span-2">
         <button type="button" class="a-btn" @click="load">Descartar cambios</button>
         <button type="submit" class="a-btn a-btn-primary" :disabled="busy || !valid">
@@ -313,5 +368,13 @@ async function save() {
       </div>
     </form>
     <p v-else class="text-sm text-muted">Cargando…</p>
+
+    <ResetEventDialog
+      v-if="event"
+      :open="resetOpen"
+      :event="event"
+      @close="resetOpen = false"
+      @done="onReset"
+    />
   </div>
 </template>

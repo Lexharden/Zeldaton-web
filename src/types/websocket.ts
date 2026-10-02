@@ -31,6 +31,7 @@ export type WsMessage =
   | ({ type: 'STREAM_UPDATED'; stream: RacerStream } & RacerScoped)
   | { type: 'LIVE_ACTIVITY'; activity: ActivityItem }
   | { type: 'CATALOG_UPDATED'; version: string }
+  | { type: 'EVENT_UPDATED' }
   | { type: 'HIVESHOCK_STATS_UPDATED'; stats: Partial<HiveShockStats> }
 
 export type WsMessageType = WsMessage['type']

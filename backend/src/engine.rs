@@ -237,6 +237,8 @@ pub struct EventPatch {
     pub required_objective_ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub donation_time: Option<DonationTimePolicy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rehearsal: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -1394,11 +1396,105 @@ impl RaceState {
         if let Some(w) = p.win_condition {
             self.event.rules.win_condition = w;
         }
+        let rehearsal_changed = p.rehearsal.is_some_and(|r| r != self.event.rehearsal);
+        if let Some(r) = p.rehearsal {
+            self.event.rehearsal = r;
+        }
         if let Some(s) = p.status {
             self.event.status = s;
         }
         let mut fx = Fx::default();
         fx.ops.push(PersistOp::Event(self.event.clone()));
+        if rehearsal_changed {
+            fx.msgs.push(WsMessage::EventUpdated);
+        }
+        Ok(fx)
+    }
+
+    /// Wipes the race (progress, items, clocks, donations, activity, winner) and puts the event back
+    /// to "upcoming" for `start_at_utc`. Racers, tokens, channels, catalog and accounts stay. Only for
+    /// an event that is not live, or one in rehearsal.
+    pub fn reset_event(
+        &mut self,
+        start_at_utc: Option<String>,
+        leave_rehearsal: bool,
+        now: DateTime<Utc>,
+    ) -> Result<Fx, String> {
+        if self.event_status(now) == EventStatus::Live && !self.event.rehearsal {
+            return Err(
+                "the event is live: only a rehearsal can be reset while it is running".into(),
+            );
+        }
+        let start = start_at_utc.unwrap_or_else(|| self.event.start_at_utc.clone());
+        let start_dt = DateTime::parse_from_rfc3339(&start)
+            .map_err(|_| "startAtUtc must be RFC 3339")?
+            .with_timezone(&Utc);
+        if start_dt <= now {
+            return Err(
+                "set a start time in the future (startAtUtc); otherwise the event would start right away"
+                    .into(),
+            );
+        }
+        let mut fx = Fx::default();
+        fx.ops.push(PersistOp::ClearRaceData);
+        self.activity.clear();
+        self.winner = None;
+        self.stats = HiveShockStats::default();
+        self.event.status = EventStatus::Upcoming;
+        self.event.start_at_utc = start;
+        if self
+            .event
+            .end_at_utc
+            .as_deref()
+            .and_then(|e| DateTime::parse_from_rfc3339(e).ok())
+            .is_some_and(|e| e.with_timezone(&Utc) <= start_dt)
+        {
+            self.event.end_at_utc = None;
+        }
+        if leave_rehearsal {
+            self.event.rehearsal = false;
+        }
+        fx.ops.push(PersistOp::Event(self.event.clone()));
+
+        let budget = self.budget_ms();
+        for i in 0..self.racers.len() {
+            let next = if self.racers[i].ingest.is_some() {
+                RacerStatus::Online
+            } else {
+                RacerStatus::Offline
+            };
+            self.set_status_quiet(i, next, now, &mut fx);
+            let next_reset = next_reset_utc(now, self.racers[i].tz, self.reset_time());
+            let r = &mut self.racers[i];
+            r.checkpoint = Checkpoint {
+                remaining_ms: budget,
+                at: now,
+            };
+            r.reset_at = next_reset;
+            r.played_ms_total = 0;
+            r.seen_ids.clear();
+            r.donation_added_ms = 0;
+            r.donation_removed_ms = 0;
+            r.donation_ids.clear();
+            r.racer.progress_percentage = 0.0;
+            r.racer.current_area = None;
+            r.racer.current_objective = None;
+            r.racer.completed_objectives.clear();
+            r.racer.finished_at_utc = None;
+            r.racer.final_time_seconds = None;
+            r.racer.stats = Some(RacerStats::default());
+            r.racer.items.clear();
+            fx.touch(i);
+            let id = r.racer.id.clone();
+            let clock = self.clock(i, now);
+            fx.down.push((id, IngestDown::Clock(clock)));
+        }
+        fx.stats_dirty = true;
+        self.flush(&mut fx);
+        fx.msgs.push(WsMessage::ClockSnapshot {
+            clocks: self.clocks(now),
+        });
+        fx.msgs.push(WsMessage::EventUpdated);
         Ok(fx)
     }
 

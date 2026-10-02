@@ -553,6 +553,19 @@ export const es = {
   navi: {
     listen: '¡Hey! ¡Escucha!',
   },
+  rehearsal: {
+    banner: 'MODO ENSAYO',
+    text: 'Lo que ves son datos de prueba: se borrarán antes del evento real.',
+  },
+  eggs: {
+    konami: '¡Secreto descubierto!',
+    saria: 'Canción de Saria',
+    epona: 'Canción de Epona',
+    sun: 'Canción del Sol',
+    storms: 'Canción de la Tormenta',
+    cucco: '¡Los Cucos se enojaron!',
+    ganon: '¡Ganondorf despierta!',
+  },
   timezones: {
     'America/Mexico_City': 'Ciudad de México',
     'Europe/Madrid': 'Madrid',

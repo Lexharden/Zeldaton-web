@@ -53,7 +53,13 @@ export const useRaceStore = defineStore('race', () => {
     }
   }
 
+  function clearWinner() {
+    winner.value = null
+    winnerDismissed.value = false
+  }
+
   return {
+    clearWinner,
     serverStandings,
     streams,
     winner,

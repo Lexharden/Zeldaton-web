@@ -52,6 +52,9 @@ validates the same files, so the two sides cannot drift apart silently.
 | Public catalog | `GET /api/catalog` (items and objectives by Link, enabled only) + `CATALOG_UPDATED` on the socket |
 | Organizer `/api/admin` | Session cookie (roles admin / moderator) or Bearer `ADMIN_TOKEN` (emergency): overview, event start/pause/resume/finish, racers + channels, tokens, pause/resume/force-close/reset-day/adjust-time/finish, catalog, accounts, audit log, time donations |
 
+Item pictures: `GET /api/media/items/<file>` (public) serves `UPLOADS_DIR/items` first, then `ART_DIR` (the images
+in `public/art/items`). In Docker the uploads live on the data volume (`/data/uploads`).
+
 Every organizer action lands in the `audit_log` table, the official record of the session (with who did it).
 
 ## Organizer panel (`/admin`)
@@ -69,8 +72,8 @@ ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed O
 | Panel | Live dashboard: **start / pause / finish the event**, who is connected, clocks, progress, alerts, activity |
 | Event | Start/end, daily time, reset hour, win condition, objectives required to finish, **limits for time from donations** |
 | Racers | Create/edit, channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
-| Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. The site and HiveShock update on their own |
-| Donations | Time that TikTok gifts / Twitch bits added or removed, per racer (today and whole event) and one by one |
+| Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. An item's **icon is just a file name** (`Hookshot-Art.png`): pick one from the picture library or **upload a new one** (shrunk to 256 px in the browser, name kept). The site and HiveShock update on their own |
+| Donations | Time that TikTok gifts / Twitch bits added or removed, per racer (today and whole event), the **top donors** (who moved the clock most) and one by one |
 | Audit | Who did what and when |
 | Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |
 
@@ -114,6 +117,21 @@ With one, visitors get a cookie notice with equal **Accept / Reject** buttons: n
 until they accept (Consent Mode v2, script injected only after consent), rejecting later deletes the `_ga` cookies,
 Global Privacy Control counts as a rejection, and `/admin` is never tracked. Page views are sent on every SPA
 navigation. The policy lives at `/privacy` (and terms at `/terms`); "Cookie settings" in the footer reopens the notice.
+
+### Rehearsal, then the real event
+
+Racers can test with their real HiveShock first. In `/admin → Evento → Ensayo y reinicio`:
+
+1. Turn on **Modo ensayo** and save: the public site shows a "test data" notice.
+2. Start the event and let the racers play, donate, break things.
+3. When they are ready, **Reiniciar evento**: type `REINICIAR`, pick the real start time. It wipes progress,
+   items, clocks, donations, donors, activity and the winner, and puts the event back to "upcoming" (and
+   ends rehearsal). **Racers, their HiveShock tokens, the catalog, pictures, accounts and the audit log stay**,
+   so nobody reconfigures anything. Open browsers reload by themselves.
+
+A real event that is live can never be reset (only a rehearsal can). Rehearsal cannot be turned on while the event
+is live: pause first. API: `POST /api/admin/event/reset` `{ confirm, startAtUtc, leaveRehearsal }`, `PUT /api/admin/event`
+`{ rehearsal }`; the socket sends `EVENT_UPDATED` on both.
 
 ## Before the event
 

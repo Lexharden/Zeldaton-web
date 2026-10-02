@@ -7,7 +7,7 @@ import { localDateTime, secondsLabel, shortDuration } from '../format'
 import { messageOf, useToasts } from '../composables/useToasts'
 import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'
-import type { DonationRow, DonationsResponse } from '../types'
+import type { DonationRow, DonationsResponse, TopDonor } from '../types'
 
 const toasts = useToasts()
 const data = ref<DonationsResponse | null>(null)
@@ -76,6 +76,13 @@ function donationText(d: DonationRow): string {
   const paid = `${d.amount.toLocaleString('es-MX')} ${unit}`
   if (!d.gift) return paid
   return `${d.gift}${d.giftCount && d.giftCount > 1 ? ` x${d.giftCount}` : ''} · ${paid}`
+}
+
+const MEDALS = ['🥇', '🥈', '🥉']
+
+function paidText(d: TopDonor): string {
+  const unit = d.currency === 'bits' ? 'bits' : 'diamantes'
+  return `${d.amount.toLocaleString('es-MX')} ${unit}`
 }
 
 function signed(seconds: number): string {
@@ -154,6 +161,52 @@ const LIMITS: Record<string, string> = {
                 <td class="num">{{ r.donations }}</td>
                 <td class="num text-success">{{ signed(r.added) }}</td>
                 <td class="num text-[#ff8aa0]">{{ signed(-r.removed) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel mb-6">
+        <header class="px-4 pt-4">
+          <h2 class="display text-2xl text-white">Top donadores</h2>
+          <p class="text-xs text-muted">
+            Quién movió más el reloj en todo el evento (suma de tiempo aplicado, sumado y restado).
+            Los diamantes de TikTok y los bits de Twitch no se pueden comparar, por eso se ordena
+            por tiempo.
+          </p>
+        </header>
+        <div class="overflow-x-auto p-2">
+          <table class="a-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Quién</th>
+                <th>Donaciones</th>
+                <th>Pagó</th>
+                <th>Sumó</th>
+                <th>Restó</th>
+                <th>Corredores</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(d, i) in data.donors" :key="`${d.platform}-${d.viewer}`">
+                <td class="num text-lg">{{ MEDALS[i] ?? i + 1 }}</td>
+                <td>
+                  <span class="inline-flex items-center gap-1.5 font-semibold text-white">
+                    <PlatformIcon :platform="d.platform" />{{ d.viewer }}
+                  </span>
+                </td>
+                <td class="num">{{ d.donations }}</td>
+                <td class="num text-secondary">{{ paidText(d) }}</td>
+                <td class="num text-success">{{ signed(d.addedSeconds) }}</td>
+                <td class="num text-[#ff8aa0]">{{ signed(-d.removedSeconds) }}</td>
+                <td class="num">{{ d.racers }}</td>
+              </tr>
+              <tr v-if="!data.donors.length">
+                <td colspan="7" class="py-6 text-center text-muted">
+                  Todavía no hay donadores con nombre.
+                </td>
               </tr>
             </tbody>
           </table>

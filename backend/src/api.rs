@@ -14,7 +14,7 @@ use crate::hub::AppState;
 use crate::standings;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
+    let live = Router::new()
         .route("/health", get(health))
         .route("/event", get(event))
         .route("/racers", get(racers))
@@ -29,7 +29,9 @@ pub fn router() -> Router<AppState> {
         .layer(SetResponseHeaderLayer::overriding(
             CACHE_CONTROL,
             HeaderValue::from_static("no-store"),
-        ))
+        ));
+    // Pictures are cacheable (they set their own Cache-Control), unlike the live race data.
+    live.route("/media/items/{file}", get(crate::media::serve))
 }
 
 async fn health(State(hub): State<AppState>) -> Json<Value> {

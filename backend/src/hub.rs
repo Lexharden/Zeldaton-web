@@ -305,13 +305,43 @@ impl Hub {
     }
 
     pub fn update_event(&self, patch: EventPatch, now: DateTime<Utc>) -> Result<EventInfo, String> {
-        self.mutate(now, |s| match s.update_event(patch) {
-            Ok(fx) => {
-                let mut e = s.event.clone();
-                e.status = s.event_status(now);
-                (fx, Ok(e))
+        self.mutate(now, |s| {
+            if patch.rehearsal == Some(true)
+                && !s.event.rehearsal
+                && s.event_status(now) == EventStatus::Live
+            {
+                return (
+                    Fx::default(),
+                    Err("the event is live: pause it before turning on rehearsal mode".into()),
+                );
             }
-            Err(e) => (Fx::default(), Err(e)),
+            match s.update_event(patch) {
+                Ok(fx) => {
+                    let mut e = s.event.clone();
+                    e.status = s.event_status(now);
+                    (fx, Ok(e))
+                }
+                Err(e) => (Fx::default(), Err(e)),
+            }
+        })
+    }
+
+    /// See `RaceState::reset_event`.
+    pub fn reset_event(
+        &self,
+        start_at_utc: Option<String>,
+        leave_rehearsal: bool,
+        now: DateTime<Utc>,
+    ) -> Result<EventInfo, String> {
+        self.mutate(now, |s| {
+            match s.reset_event(start_at_utc, leave_rehearsal, now) {
+                Ok(fx) => {
+                    let mut e = s.event.clone();
+                    e.status = s.event_status(now);
+                    (fx, Ok(e))
+                }
+                Err(e) => (Fx::default(), Err(e)),
+            }
         })
     }
 

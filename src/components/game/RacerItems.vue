@@ -7,6 +7,7 @@ import { ART } from '@/config/artwork'
 import { useCatalogStore } from '@/stores/catalog'
 import type { Racer } from '@/types/racer'
 import { countOwned } from '@/utils/catalog'
+import { itemIconUrl } from '@/utils/media'
 
 /**
  * Items organised by Link: child, adult and what both share, each split by category (weapons,
@@ -16,7 +17,7 @@ import { countOwned } from '@/utils/catalog'
 const props = defineProps<{ racer: Racer }>()
 const catalog = useCatalogStore()
 const has = (id: string) => Boolean(props.racer.items?.[id])
-const icon = (id: string, custom?: string) => custom ?? ART.item(id)
+const icon = (id: string, custom?: string) => (custom ? itemIconUrl(custom) : ART.item(id))
 </script>
 
 <template>

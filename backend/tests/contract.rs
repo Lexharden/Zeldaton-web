@@ -182,6 +182,7 @@ fn ws_samples() -> Vec<(&'static str, WsMessage)> {
                 },
             },
         ),
+        ("EVENT_UPDATED", WsMessage::EventUpdated),
         (
             "CATALOG_UPDATED",
             WsMessage::CatalogUpdated {
@@ -208,7 +209,7 @@ fn every_websocket_message_matches_its_fixture() {
     let samples = ws_samples();
     assert_eq!(
         samples.len(),
-        19,
+        20,
         "one fixture per message type in src/types/websocket.ts"
     );
     for (name, msg) in samples {

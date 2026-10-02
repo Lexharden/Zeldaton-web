@@ -4,7 +4,7 @@
 //!
 //! Every state-changing call is recorded in `audit_log` with who did it: the official session log.
 
-use axum::extract::{Extension, Path, Query, Request, State};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Query, Request, State};
 use axum::http::header::{AUTHORIZATION, COOKIE, HOST, SET_COOKIE, USER_AGENT};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::middleware::{self, Next};
@@ -56,6 +56,7 @@ pub fn router(hub: AppState) -> Router<AppState> {
         .route("/auth/logout", post(logout))
         .route("/overview", get(overview))
         .route("/event", put(update_event))
+        .route("/event/reset", post(reset_event))
         .route("/event/{action}", post(event_action))
         .route("/racers", get(list_racers).post(create_racer))
         .route("/racers/{id}", patch(update_racer))
@@ -71,6 +72,13 @@ pub fn router(hub: AppState) -> Router<AppState> {
             "/catalog/objectives/{id}",
             put(put_objective).delete(delete_objective),
         )
+        .route(
+            "/media/items",
+            get(crate::media::list)
+                .post(crate::media::upload)
+                .layer(DefaultBodyLimit::max(crate::media::MAX_BYTES + 4096)),
+        )
+        .route("/media/items/{file}", delete(crate::media::delete))
         .route("/audit", get(audit))
         .route("/donations", get(donations))
         .layer(middleware::from_fn_with_state(hub, authenticate));
@@ -439,6 +447,15 @@ async fn reset_password(
 
 // ---- event --------------------------------------------------------------------------------------
 
+/// "The event is live..." refusals are a state conflict (409); anything else is a bad request.
+fn state_conflict(e: String) -> ApiError {
+    if e.starts_with("the event is live") {
+        ApiError::Conflict(e)
+    } else {
+        ApiError::BadRequest(e)
+    }
+}
+
 fn bad(e: String) -> ApiError {
     ApiError::BadRequest(e)
 }
@@ -450,8 +467,58 @@ async fn update_event(
 ) -> Result<Json<EventInfo>, ApiError> {
     p.require(Role::Admin)?;
     let payload = json!({ "patch": patch });
-    let event = hub.update_event(patch, Utc::now()).map_err(bad)?;
+    let event = hub
+        .update_event(patch, Utc::now())
+        .map_err(state_conflict)?;
     hub.audit_as(&p.actor, "event.update", None, payload);
+    Ok(Json(event))
+}
+
+/// The word the organizer must type to reset the event.
+pub const RESET_CONFIRMATION: &str = "REINICIAR";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResetBody {
+    confirm: String,
+    /// New start (RFC 3339). Required when the current one is already past.
+    start_at_utc: Option<String>,
+    /// End rehearsal mode too (default: yes, the usual next step is the real event).
+    #[serde(default = "yes")]
+    leave_rehearsal: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// Wipes the test run: progress, items, clocks, donations and activity. Racers, their HiveShock
+/// tokens, the catalog, pictures and accounts stay; the audit log keeps this very action.
+async fn reset_event(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+    Json(body): Json<ResetBody>,
+) -> Result<Json<EventInfo>, ApiError> {
+    p.require(Role::Admin)?;
+    if body.confirm != RESET_CONFIRMATION {
+        return Err(ApiError::BadRequest(format!(
+            "type {RESET_CONFIRMATION} to confirm"
+        )));
+    }
+    let was_rehearsal = hub.read(|s| s.event.rehearsal);
+    let event = hub
+        .reset_event(body.start_at_utc.clone(), body.leave_rehearsal, Utc::now())
+        .map_err(state_conflict)?;
+    hub.audit_as(
+        &p.actor,
+        "event.reset",
+        None,
+        json!({
+            "startAtUtc": event.start_at_utc,
+            "wasRehearsal": was_rehearsal,
+            "leftRehearsal": body.leave_rehearsal,
+        }),
+    );
     Ok(Json(event))
 }
 
@@ -882,6 +949,9 @@ async fn donations(
     let totals = db::donation_totals(&hub.pool)
         .await
         .map_err(ApiError::internal)?;
+    let donors = db::top_donors(&hub.pool, 10)
+        .await
+        .map_err(ApiError::internal)?;
     let (policy, today) = hub.read(|s| {
         let today: Vec<Value> = s
             .racers
@@ -897,6 +967,6 @@ async fn donations(
         (s.event.donation_time.clone(), today)
     });
     Ok(Json(
-        json!({ "policy": policy, "today": today, "totals": totals, "recent": recent }),
+        json!({ "policy": policy, "today": today, "totals": totals, "donors": donors, "recent": recent }),
     ))
 }

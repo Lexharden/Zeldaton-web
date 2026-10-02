@@ -5,6 +5,7 @@ import type { Racer } from '@/types/racer'
 import type {
   AdminCatalog,
   AuditRow,
+  MediaFile,
   DonationsResponse,
   EventAction,
   EventPatchInput,
@@ -150,6 +151,50 @@ export class AdminApi {
     )
   deleteObjective = (id: string) =>
     this.request<void>('DELETE', `/catalog/objectives/${encodeURIComponent(id)}`)
+
+  /** Wipes the test run and puts the event back to "upcoming". `confirm` must be REINICIAR. */
+  resetEvent = (body: { confirm: string; startAtUtc?: string; leaveRehearsal: boolean }) =>
+    this.request<EventInfo>('POST', '/event/reset', body)
+
+  // ---- item pictures
+  mediaItems = () => this.request<MediaFile[]>('GET', '/media/items')
+  deleteMedia = (name: string) =>
+    this.request<void>('DELETE', `/media/items/${encodeURIComponent(name)}`)
+  /** Uploads the picture itself (not JSON) under `name`. */
+  async uploadMedia(name: string, file: Blob): Promise<MediaFile> {
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (this.csrf) headers['X-CSRF-Token'] = this.csrf
+    headers['Content-Type'] = file.type || 'application/octet-stream'
+    let res: Response
+    try {
+      res = await this.fetcher(`${this.base}/media/items?name=${encodeURIComponent(name)}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: file,
+      })
+    } catch {
+      throw new AdminApiError(0, 'network', 'No se pudo conectar con el servidor.')
+    }
+    let data: unknown = null
+    try {
+      data = await res.json()
+    } catch {
+      /* empty or non-JSON body */
+    }
+    if (!res.ok) {
+      const err = (data ?? {}) as { error?: string; message?: string }
+      if (res.status === 401) this.onUnauthorized?.()
+      throw new AdminApiError(
+        res.status,
+        err.error ?? 'http',
+        res.status === 413
+          ? 'La imagen pesa demasiado (máximo 2 MB).'
+          : (err.message ?? `Error ${res.status}`),
+      )
+    }
+    return data as MediaFile
+  }
 
   // ---- audit
   audit = (limit = 100) => this.request<AuditRow[]>('GET', `/audit?limit=${limit}`)

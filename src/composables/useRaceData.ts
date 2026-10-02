@@ -1,12 +1,9 @@
 import { watch } from 'vue'
 import { getTransport } from '@/services/websocket'
 import { dispatchMessage } from '@/services/websocket/dispatcher'
-import { useCatalogStore } from '@/stores/catalog'
+import { loadAllData } from '@/services/loadAll'
 import { useConnectionStore } from '@/stores/connection'
 import { useEventStore } from '@/stores/event'
-import { useHiveShockStore } from '@/stores/hiveshock'
-import { useRaceStore } from '@/stores/race'
-import { useRacersStore } from '@/stores/racers'
 import { useClockResync } from './useRaceClock'
 
 let started = false
@@ -18,16 +15,8 @@ let startTimer: ReturnType<typeof setTimeout> | null = null
  */
 export function useRaceData() {
   const event = useEventStore()
-  const racers = useRacersStore()
-  const race = useRaceStore()
-  const hive = useHiveShockStore()
   const connection = useConnectionStore()
-  const catalog = useCatalogStore()
-
-  async function loadAll() {
-    await Promise.allSettled([event.load(), racers.load(), hive.load(), catalog.load()])
-    await race.load()
-  }
+  const loadAll = loadAllData
 
   function start() {
     if (started) return

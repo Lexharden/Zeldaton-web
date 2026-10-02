@@ -3,10 +3,12 @@ import { t } from '@/i18n'
 import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import EventHeader from '@/components/layout/EventHeader.vue'
+import RehearsalBanner from '@/components/layout/RehearsalBanner.vue'
 import NavBar from '@/components/layout/NavBar.vue'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import NaviCursor from '@/components/common/NaviCursor.vue'
 import CookieBanner from '@/components/common/CookieBanner.vue'
+import EasterEggs from '@/components/common/EasterEggs.vue'
 import FinishOverlay from '@/components/race/FinishOverlay.vue'
 
 const route = useRoute()
@@ -31,7 +33,9 @@ const showHeader = computed(() => route.meta.eventHeader !== false)
     </main>
     <SiteFooter />
     <FinishOverlay />
+    <RehearsalBanner />
     <NaviCursor />
     <CookieBanner />
+    <EasterEggs />
   </div>
 </template>

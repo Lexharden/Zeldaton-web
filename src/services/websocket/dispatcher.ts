@@ -1,3 +1,4 @@
+import { loadAllData } from '@/services/loadAll'
 import { useCatalogStore } from '@/stores/catalog'
 import { useConnectionStore } from '@/stores/connection'
 import { useHiveShockStore } from '@/stores/hiveshock'
@@ -89,6 +90,11 @@ export function dispatchMessage(message: WsMessage, serverTimeUtc?: string): voi
       break
     case 'CATALOG_UPDATED':
       void useCatalogStore().onUpdated(message.version)
+      break
+    case 'EVENT_UPDATED':
+      // A reset or a rehearsal switch: what we hold is stale in many places at once.
+      race.clearWinner()
+      void loadAllData()
       break
     case 'STREAM_UPDATED':
       racers.patch(message.racerId, { stream: message.stream })

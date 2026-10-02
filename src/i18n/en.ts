@@ -552,6 +552,19 @@ export const en: Messages = {
   navi: {
     listen: 'Hey! Listen!',
   },
+  rehearsal: {
+    banner: 'REHEARSAL',
+    text: 'You are seeing test data: it will be wiped before the real event.',
+  },
+  eggs: {
+    konami: 'You found a secret!',
+    saria: "Saria's Song",
+    epona: "Epona's Song",
+    sun: "Sun's Song",
+    storms: 'Song of Storms',
+    cucco: 'The Cuccos are angry!',
+    ganon: 'Ganondorf awakens!',
+  },
   timezones: {
     'America/Mexico_City': 'Mexico City',
     'Europe/Madrid': 'Madrid',

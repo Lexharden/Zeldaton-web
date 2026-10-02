@@ -51,6 +51,11 @@ const levelTone = {
       :subtitle="data ? `${data.event.name} · ${data.event.edition}` : 'Cargando…'"
     >
       <LiveBadge v-if="data" :status="data.event.status" />
+      <span
+        v-if="data?.event.rehearsal"
+        class="hud-label rounded border border-warning/60 px-2 py-1 text-warning"
+        >ENSAYO</span
+      >
       <EventControls
         v-if="data && admin.isAdmin"
         :status="data.event.status"

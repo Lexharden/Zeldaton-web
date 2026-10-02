@@ -18,4 +18,9 @@ falls back to its CSS-only decoration), so you can add them one by one.
 Item ids: master-sword, hookshot, longshot, bow, bombs, boomerang, megaton-hammer,
 iron-boots, mirror-shield.
 
+Item pictures (`items/`) are referenced from the catalog by **file name only**
+(admin panel → Catalog → Icon). The backend serves them from `/api/media/items/<name>`; pictures
+uploaded in the panel are stored on the server and need no commit. Keep new files here at most
+256 px on the longest side, with a transparent background.
+
 Names can be changed in `src/config/artwork.ts`.

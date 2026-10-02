@@ -11,6 +11,7 @@ pub mod domain;
 pub mod engine;
 pub mod error;
 pub mod hub;
+pub mod media;
 pub mod seed;
 pub mod standings;
 pub mod state;

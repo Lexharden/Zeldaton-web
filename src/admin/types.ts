@@ -98,6 +98,7 @@ export interface EventPatchInput {
   winCondition?: string
   requiredObjectiveIds?: string[]
   donationTime?: DonationTimePolicy
+  rehearsal?: boolean
 }
 
 /** One time donation as HiveShock reported it and what the clock really got. */
@@ -124,12 +125,36 @@ export interface DonationTotals {
   removedSeconds: number
 }
 
+/** A viewer ranked by the time their donations moved. */
+export interface TopDonor {
+  viewer: string
+  platform: 'tiktok' | 'twitch'
+  currency: 'diamonds' | 'bits'
+  donations: number
+  /** Total diamonds or bits paid. */
+  amount: number
+  addedSeconds: number
+  removedSeconds: number
+  /** How many different racers they donated to. */
+  racers: number
+  lastAt: string
+}
+
+/** A picture a catalog item can use: shipped with the site or uploaded from the panel. */
+export interface MediaFile {
+  name: string
+  bytes: number
+  uploaded: boolean
+}
+
 export interface DonationsResponse {
   policy: DonationTimePolicy
   /** What counts against today's limits, per racer. */
   today: { racerId: string; addedSeconds: number; removedSeconds: number }[]
   /** Whole event. */
   totals: DonationTotals[]
+  /** Top donors of the whole event, by time moved. */
+  donors: TopDonor[]
   recent: DonationRow[]
 }
 

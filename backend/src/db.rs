@@ -108,6 +108,9 @@ pub enum PersistOp {
     DeleteCatalogItem(String),
     CatalogObjective(Box<CatalogObjective>),
     DeleteCatalogObjective(String),
+    /// Event reset: forgets the race itself (activity feed and donation ledger). Racers, tokens,
+    /// catalog, accounts and the audit log stay.
+    ClearRaceData,
 }
 
 fn rfc(d: DateTime<Utc>) -> String {
@@ -124,13 +127,13 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
     match op {
         PersistOp::Event(e) => {
             sqlx::query(
-                "INSERT INTO event (id,name,game,edition,status,start_at_utc,end_at_utc,timezone,daily_budget_seconds,daily_reset_local_time,win_condition,required_objective_ids,donation_time)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                "INSERT INTO event (id,name,game,edition,status,start_at_utc,end_at_utc,timezone,daily_budget_seconds,daily_reset_local_time,win_condition,required_objective_ids,donation_time,rehearsal)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(id) DO UPDATE SET name=excluded.name, game=excluded.game, edition=excluded.edition, status=excluded.status,
                    start_at_utc=excluded.start_at_utc, end_at_utc=excluded.end_at_utc, timezone=excluded.timezone,
                    daily_budget_seconds=excluded.daily_budget_seconds, daily_reset_local_time=excluded.daily_reset_local_time,
                    win_condition=excluded.win_condition, required_objective_ids=excluded.required_objective_ids,
-                   donation_time=excluded.donation_time",
+                   donation_time=excluded.donation_time, rehearsal=excluded.rehearsal",
             )
             .bind(&e.id)
             .bind(&e.name)
@@ -145,6 +148,7 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .bind(&e.rules.win_condition)
             .bind(serde_json::to_string(&e.rules.required_objective_ids).unwrap_or_default())
             .bind(serde_json::to_string(&e.donation_time).unwrap_or_else(|_| "{}".into()))
+            .bind(e.rehearsal)
             .execute(pool)
             .await?;
         }
@@ -235,6 +239,16 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
                 .bind(&a.subject)
                 .execute(pool)
                 .await?;
+        }
+        PersistOp::ClearRaceData => {
+            let mut tx = pool.begin().await?;
+            sqlx::query("DELETE FROM activity")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM time_donations")
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
         }
         PersistOp::Counters(c) => {
             sqlx::query(
@@ -437,6 +451,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
         },
         donation_time: serde_json::from_str(&e.get::<String, _>("donation_time"))
             .unwrap_or_default(),
+        rehearsal: e.get("rehearsal"),
     };
 
     let mut channels: HashMap<String, Vec<Channel>> = HashMap::new();
@@ -660,6 +675,47 @@ pub async fn donation_totals(pool: &SqlitePool) -> Result<Vec<serde_json::Value>
                 "donations": r.get::<i64, _>("n"),
                 "addedSeconds": r.get::<i64, _>("added") / 1000,
                 "removedSeconds": r.get::<i64, _>("removed") / 1000,
+            })
+        })
+        .collect())
+}
+
+/// Who donated the most. A donor is one viewer name on one platform (the same handle can exist
+/// on both). Ranked by the time they moved, the only measure that is comparable between TikTok
+/// diamonds and Twitch bits; the amount paid is kept in its own currency. Donations without a
+/// viewer name are left out.
+pub async fn top_donors(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT MIN(viewer) AS viewer, platform, currency, COUNT(*) AS n, SUM(amount) AS amount,
+                COALESCE(SUM(CASE WHEN applied_ms > 0 THEN applied_ms ELSE 0 END), 0) AS added,
+                COALESCE(SUM(CASE WHEN applied_ms < 0 THEN -applied_ms ELSE 0 END), 0) AS removed,
+                COUNT(DISTINCT racer_id) AS racers,
+                MAX(ts) AS last_ts
+         FROM time_donations
+         WHERE viewer IS NOT NULL AND TRIM(viewer) <> ''
+         GROUP BY LOWER(TRIM(viewer)), platform, currency
+         ORDER BY SUM(ABS(applied_ms)) DESC, SUM(amount) DESC
+         LIMIT ?1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "viewer": r.get::<String, _>("viewer"),
+                "platform": r.get::<String, _>("platform"),
+                "currency": r.get::<String, _>("currency"),
+                "donations": r.get::<i64, _>("n"),
+                "amount": r.get::<i64, _>("amount"),
+                "addedSeconds": r.get::<i64, _>("added") / 1000,
+                "removedSeconds": r.get::<i64, _>("removed") / 1000,
+                "racers": r.get::<i64, _>("racers"),
+                "lastAt": r.get::<String, _>("last_ts"),
             })
         })
         .collect())

@@ -24,6 +24,8 @@ export interface EventInfo {
   rules: EventRules
   /** Organizer limits for time from viewer donations (absent on older backends). */
   donationTime?: DonationTimePolicy
+  /** Test run: the data is not the real event's and will be wiped (absent on older backends). */
+  rehearsal?: boolean
 }
 
 /**

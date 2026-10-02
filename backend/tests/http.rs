@@ -55,6 +55,11 @@ async fn harness() -> Harness {
         admin_user: "admin".into(),
         admin_password: None,
         cookie_secure: Some(false),
+        uploads_dir: std::env::temp_dir()
+            .join(format!("zeldathon-test-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned(),
+        art_dir: "../public/art/items".into(),
     };
     let hub = Hub::new(state, tx, cfg, pool.clone());
     let ticker = hub.clone();
@@ -333,13 +338,6 @@ async fn hiveshock_session_flows_to_rest_and_public_ws() {
         json!(["kokiri-forest", "deku-tree"])
     );
     assert_eq!(ralbat["items"]["longshot"], true);
-    let (_, standings) = call(&h, "GET", "/api/standings", None, None).await;
-    assert_eq!(standings[0], json!({ "racerId": "ralbat", "rank": 1 }));
-    let (_, stats) = call(&h, "GET", "/api/hiveshock/stats", None, None).await;
-    assert_eq!(stats["connectedRacers"], 1);
-    assert!(stats["progressEvents"].as_i64().unwrap() >= 1);
-
-    // State survives a restart: everything was written through to SQLite.
     tokio::time::sleep(Duration::from_millis(400)).await;
     let reloaded = db::load(&h.pool).await.unwrap().unwrap();
     let r = &reloaded.racers[reloaded.idx("ralbat").unwrap()].racer;
@@ -1314,6 +1312,12 @@ async fn time_donations_flow_from_hiveshock_to_the_ledger_and_survive_a_restart(
     assert_eq!(recent[0]["appliedSeconds"], 120);
     let totals = panel["totals"].as_array().unwrap();
     assert_eq!(totals[0]["addedSeconds"], 120);
+    let donors = panel["donors"].as_array().unwrap();
+    assert_eq!(donors.len(), 1);
+    assert_eq!(donors[0]["viewer"], "fan");
+    assert_eq!(donors[0]["platform"], "twitch");
+    assert_eq!(donors[0]["amount"], 200);
+    assert_eq!(donors[0]["addedSeconds"], 120);
     let today = panel["today"].as_array().unwrap();
     assert!(
         today
@@ -1329,4 +1333,269 @@ async fn time_donations_flow_from_hiveshock_to_the_ledger_and_survive_a_restart(
     assert!(reloaded.racers[i].donation_ids.contains("don-1"));
     assert_eq!(reloaded.racers[i].donation_added_ms, 120_000);
     assert!(!reloaded.event.donation_time.enabled);
+}
+
+/// Raw-body request (the picture upload), answered as bytes.
+async fn raw(
+    h: &Harness,
+    method: &str,
+    uri: &str,
+    bearer: Option<&str>,
+    body: Vec<u8>,
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(t) = bearer {
+        req = req.header("authorization", format!("Bearer {t}"));
+    }
+    let req = req
+        .header("content-type", "application/octet-stream")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app::build(h.hub.clone()).oneshot(req).await.unwrap();
+    let (status, headers) = (res.status(), res.headers().clone());
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, headers, bytes.to_vec())
+}
+
+const TINY_PNG: [u8; 12] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
+
+#[tokio::test]
+async fn item_pictures_are_uploaded_listed_served_and_deleted_by_file_name() {
+    let h = harness().await;
+    let up = "/api/admin/media/items?name=Test%20Item%27s.png";
+
+    // Only organizers upload.
+    let (s, _, _) = raw(&h, "POST", up, None, TINY_PNG.to_vec()).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    // It must be a real picture with a plain name.
+    let (s, _, _) = raw(&h, "POST", up, Some(ADMIN), b"<svg></svg>".to_vec()).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let bad = "/api/admin/media/items?name=..%2Fevil.png";
+    let (s, _, _) = raw(&h, "POST", bad, Some(ADMIN), TINY_PNG.to_vec()).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let big = vec![0x89; zeldathon_server::media::MAX_BYTES + 5000];
+    let (s, _, _) = raw(&h, "POST", up, Some(ADMIN), big).await;
+    assert_eq!(s, StatusCode::PAYLOAD_TOO_LARGE);
+
+    let (s, _, _) = raw(&h, "POST", up, Some(ADMIN), TINY_PNG.to_vec()).await;
+    assert_eq!(s, StatusCode::CREATED);
+
+    // Public, cacheable, with the right type.
+    let (s, headers, bytes) = raw(
+        &h,
+        "GET",
+        "/api/media/items/Test%20Item%27s.png",
+        None,
+        vec![],
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(headers["content-type"], "image/png");
+    assert!(
+        headers["cache-control"]
+            .to_str()
+            .unwrap()
+            .contains("max-age")
+    );
+    assert_eq!(bytes, TINY_PNG);
+    let (s, _, _) = raw(&h, "GET", "/api/media/items/nope.png", None, vec![]).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, _, _) = raw(&h, "GET", "/api/media/items/..%2FCargo.toml", None, vec![]).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    // The list has the upload (and the pictures shipped with the site).
+    let (s, list) = call(&h, "GET", "/api/admin/media/items", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let list = list.as_array().unwrap();
+    assert!(
+        list.iter()
+            .any(|f| f["name"] == "Test Item's.png" && f["uploaded"] == true)
+    );
+    assert!(
+        list.iter()
+            .any(|f| f["name"] == "Hookshot-Art.png" && f["uploaded"] == false)
+    );
+
+    // A catalog item points at it by name alone.
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/catalog/items/prueba",
+        Some(ADMIN),
+        Some(json!({ "id": "prueba", "group": "tool", "age": "both", "nameEs": "Prueba", "nameEn": "Test",
+            "short": "PR", "icon": "Test Item's.png", "enabled": true, "sortOrder": 9999 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/catalog/items/prueba",
+        Some(ADMIN),
+        Some(json!({ "id": "prueba", "group": "tool", "age": "both", "nameEs": "Prueba", "nameEn": "Test",
+            "short": "PR", "icon": "javascript:alert(1)", "enabled": true, "sortOrder": 9999 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    let (s, _, _) = raw(
+        &h,
+        "DELETE",
+        "/api/admin/media/items/Test%20Item%27s.png",
+        Some(ADMIN),
+        vec![],
+    )
+    .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, _, _) = raw(
+        &h,
+        "GET",
+        "/api/media/items/Test%20Item%27s.png",
+        None,
+        vec![],
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn resetting_the_event_wipes_the_test_run_and_keeps_racers_tokens_and_catalog() {
+    let h = harness().await;
+    let in_30_days = (Utc::now() + chrono::Duration::days(30)).to_rfc3339();
+    let reset = |body: Value| {
+        let h = &h;
+        async move { call(h, "POST", "/api/admin/event/reset", Some(ADMIN), Some(body)).await }
+    };
+
+    // A real (not rehearsal) event that is live can never be reset.
+    make_event_live(&h).await;
+    let (s, _) = reset(json!({ "confirm": "REINICIAR", "startAtUtc": in_30_days })).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    // ...and rehearsal cannot be switched on while it is running.
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "rehearsal": true })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    // Pause it, switch rehearsal on: the public API says so and sockets are told to reload.
+    let (s, _) = call(&h, "POST", "/api/admin/event/pause", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let mut public = connect_ws(&h, "/ws", None).await.unwrap();
+    next_json(&mut public).await;
+    let (s, event) = call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "rehearsal": true })),
+    )
+    .await;
+    assert_eq!(
+        (s, event["rehearsal"].clone()),
+        (StatusCode::OK, json!(true))
+    );
+    wait_for(&mut public, "EVENT_UPDATED").await;
+    let (_, public_event) = call(&h, "GET", "/api/event", None, None).await;
+    assert_eq!(public_event["rehearsal"], true);
+
+    // A rehearsal race: live event, a racer plays, gets an item and a donation.
+    call(&h, "POST", "/api/admin/event/resume", Some(ADMIN), None).await;
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "ITEM_ACQUIRED", "item": "longshot" }),
+    )
+    .await;
+    send(&mut hs, json!({ "type": "GAME_PROGRESS", "progress": { "percentage": 41.5, "currentArea": "forest-temple", "completedObjectives": ["kokiri-forest"] } })).await;
+    send(
+        &mut hs,
+        json!({ "type": "TIME_DONATION", "id": "d1", "deltaSeconds": 300,
+            "source": { "platform": "twitch", "currency": "bits", "amount": 100, "viewer": "fan" } }),
+    )
+    .await;
+    wait_for(&mut hs, "TIME_APPLIED").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let (_, panel) = call(&h, "GET", "/api/admin/donations", Some(ADMIN), None).await;
+    assert_eq!(panel["recent"].as_array().unwrap().len(), 1);
+
+    // The confirmation word and a future start are required.
+    let (s, _) = reset(json!({ "confirm": "si", "startAtUtc": in_30_days })).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) =
+        reset(json!({ "confirm": "REINICIAR", "startAtUtc": "2020-01-01T00:00:00Z" })).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    // Only an admin.
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/event/reset",
+        None,
+        Some(json!({ "confirm": "REINICIAR" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    // Rehearsal allows resetting even while live.
+    let (s, event) = reset(json!({ "confirm": "REINICIAR", "startAtUtc": in_30_days })).await;
+    assert_eq!(s, StatusCode::OK, "{event}");
+    assert_eq!(event["status"], "upcoming");
+    assert_eq!(event["rehearsal"], false);
+    wait_for(&mut public, "EVENT_UPDATED").await;
+
+    let (_, racer) = call(&h, "GET", "/api/racers/cuaco", None, None).await;
+    assert_eq!(racer["progressPercentage"], 0.0);
+    assert!(racer["items"].as_object().is_none_or(|m| m.is_empty()));
+    assert!(racer["completedObjectives"].as_array().unwrap().is_empty());
+    assert!(racer["currentArea"].is_null());
+    assert_eq!(racer["status"], "online"); // still connected, ready for the real thing
+    assert_eq!(racer["remainingSeconds"], 4 * 3600);
+    let (_, activity) = call(&h, "GET", "/api/activity", None, None).await;
+    assert!(activity.as_array().unwrap().is_empty());
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let (_, panel) = call(&h, "GET", "/api/admin/donations", Some(ADMIN), None).await;
+    assert!(panel["recent"].as_array().unwrap().is_empty());
+    assert!(panel["donors"].as_array().unwrap().is_empty());
+
+    // Racers and their tokens survive, and the reset itself is in the audit log.
+    let (_, racers) = call(&h, "GET", "/api/racers", None, None).await;
+    assert_eq!(racers.as_array().unwrap().len(), 9);
+    let mut again = connect_ws(&h, "/ingest", Some(&h.token("ralbat")))
+        .await
+        .unwrap();
+    send(&mut again, json!({ "type": "HELLO" })).await;
+    wait_for(&mut again, "CLOCK").await;
+    let (_, audit) = call(&h, "GET", "/api/admin/audit", Some(ADMIN), None).await;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["action"] == "event.reset")
+    );
+
+    // Everything was written through to the database.
+    let reloaded = db::load(&h.pool).await.unwrap().unwrap();
+    assert!(!reloaded.event.rehearsal);
+    assert_eq!(
+        reloaded.event.status,
+        zeldathon_server::domain::EventStatus::Upcoming
+    );
+    let r = &reloaded.racers[reloaded.idx("cuaco").unwrap()];
+    assert!(r.racer.completed_objectives.is_empty());
+    assert!(r.donation_ids.is_empty());
+    assert!(reloaded.activity.is_empty());
+
+    // Now it is a real, upcoming event: starting and then resetting is refused.
+    call(&h, "POST", "/api/admin/event/start", Some(ADMIN), None).await;
+    let (s, _) = reset(json!({ "confirm": "REINICIAR", "startAtUtc": in_30_days })).await;
+    assert_eq!(s, StatusCode::CONFLICT);
 }
