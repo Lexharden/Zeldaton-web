@@ -140,13 +140,6 @@ export interface TopDonor {
   lastAt: string
 }
 
-/** A picture a catalog item can use: shipped with the site or uploaded from the panel. */
-export interface MediaFile {
-  name: string
-  bytes: number
-  uploaded: boolean
-}
-
 export interface DonationsResponse {
   policy: DonationTimePolicy
   /** What counts against today's limits, per racer. */

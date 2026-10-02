@@ -59,7 +59,6 @@ async fn harness() -> Harness {
             .join(format!("zeldathon-test-{}", std::process::id()))
             .to_string_lossy()
             .into_owned(),
-        art_dir: "../public/art/items".into(),
     };
     let hub = Hub::new(state, tx, cfg, pool.clone());
     let ticker = hub.clone();
@@ -1360,35 +1359,38 @@ async fn raw(
 const TINY_PNG: [u8; 12] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
 
 #[tokio::test]
-async fn item_pictures_are_uploaded_listed_served_and_deleted_by_file_name() {
+async fn racer_photos_are_uploaded_served_replaced_and_deleted() {
     let h = harness().await;
-    let up = "/api/admin/media/items?name=Test%20Item%27s.png";
+    let up = "/api/admin/racers/ralbat/photo";
 
-    // Only organizers upload.
+    // Only organizers upload, only for racers that exist, only real pictures.
     let (s, _, _) = raw(&h, "POST", up, None, TINY_PNG.to_vec()).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
-    // It must be a real picture with a plain name.
+    let (s, _, _) = raw(
+        &h,
+        "POST",
+        "/api/admin/racers/nadie/photo",
+        Some(ADMIN),
+        TINY_PNG.to_vec(),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
     let (s, _, _) = raw(&h, "POST", up, Some(ADMIN), b"<svg></svg>".to_vec()).await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
-    let bad = "/api/admin/media/items?name=..%2Fevil.png";
-    let (s, _, _) = raw(&h, "POST", bad, Some(ADMIN), TINY_PNG.to_vec()).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
     let big = vec![0x89; zeldathon_server::media::MAX_BYTES + 5000];
     let (s, _, _) = raw(&h, "POST", up, Some(ADMIN), big).await;
     assert_eq!(s, StatusCode::PAYLOAD_TOO_LARGE);
 
-    let (s, _, _) = raw(&h, "POST", up, Some(ADMIN), TINY_PNG.to_vec()).await;
+    // The upload sets the racer's avatar to a public URL that serves the picture.
+    let (s, _, body) = raw(&h, "POST", up, Some(ADMIN), TINY_PNG.to_vec()).await;
     assert_eq!(s, StatusCode::CREATED);
-
-    // Public, cacheable, with the right type.
-    let (s, headers, bytes) = raw(
-        &h,
-        "GET",
-        "/api/media/items/Test%20Item%27s.png",
-        None,
-        vec![],
-    )
-    .await;
+    let racer: Value = serde_json::from_slice(&body).unwrap();
+    let url = racer["avatarUrl"].as_str().unwrap().to_string();
+    assert!(
+        url.starts_with("/api/media/racers/ralbat-") && url.ends_with(".png"),
+        "{url}"
+    );
+    let (s, headers, bytes) = raw(&h, "GET", &url, None, vec![]).await;
     assert_eq!(s, StatusCode::OK);
     assert_eq!(headers["content-type"], "image/png");
     assert!(
@@ -1398,64 +1400,63 @@ async fn item_pictures_are_uploaded_listed_served_and_deleted_by_file_name() {
             .contains("max-age")
     );
     assert_eq!(bytes, TINY_PNG);
-    let (s, _, _) = raw(&h, "GET", "/api/media/items/nope.png", None, vec![]).await;
-    assert_eq!(s, StatusCode::NOT_FOUND);
-    let (s, _, _) = raw(&h, "GET", "/api/media/items/..%2FCargo.toml", None, vec![]).await;
-    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (_, public) = call(&h, "GET", "/api/racers/ralbat", None, None).await;
+    assert_eq!(public["avatarUrl"], url.as_str());
 
-    // The list has the upload (and the pictures shipped with the site).
-    let (s, list) = call(&h, "GET", "/api/admin/media/items", Some(ADMIN), None).await;
-    assert_eq!(s, StatusCode::OK);
-    let list = list.as_array().unwrap();
-    assert!(
-        list.iter()
-            .any(|f| f["name"] == "Test Item's.png" && f["uploaded"] == true)
+    // A new photo gets a new URL and the old file is gone.
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    let jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+    let (s, _, body) = raw(&h, "POST", up, Some(ADMIN), jpeg.clone()).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let second: Value = serde_json::from_slice(&body).unwrap();
+    let url2 = second["avatarUrl"].as_str().unwrap().to_string();
+    assert_ne!(url, url2);
+    assert!(url2.ends_with(".jpg"));
+    assert_eq!(
+        raw(&h, "GET", &url, None, vec![]).await.0,
+        StatusCode::NOT_FOUND
     );
-    assert!(
-        list.iter()
-            .any(|f| f["name"] == "Hookshot-Art.png" && f["uploaded"] == false)
+    assert_eq!(raw(&h, "GET", &url2, None, vec![]).await.2, jpeg);
+
+    // Nothing else is served from that route, and no path tricks.
+    for bad in [
+        "/api/media/racers/nope.png",
+        "/api/media/racers/..%2FCargo.toml",
+        "/api/media/racers/ralbat.png",
+    ] {
+        assert_eq!(
+            raw(&h, "GET", bad, None, vec![]).await.0,
+            StatusCode::NOT_FOUND,
+            "{bad}"
+        );
+    }
+
+    // Deleting brings back the placeholder (no avatar at all) and removes the file.
+    let (s, _, body) = raw(&h, "DELETE", up, Some(ADMIN), vec![]).await;
+    assert_eq!(s, StatusCode::OK);
+    let cleared: Value = serde_json::from_slice(&body).unwrap();
+    assert!(cleared.get("avatarUrl").is_none_or(|v| v.is_null()));
+    assert_eq!(
+        raw(&h, "GET", &url2, None, vec![]).await.0,
+        StatusCode::NOT_FOUND
     );
 
-    // A catalog item points at it by name alone.
-    let (s, _) = call(
-        &h,
-        "PUT",
-        "/api/admin/catalog/items/prueba",
-        Some(ADMIN),
-        Some(json!({ "id": "prueba", "group": "tool", "age": "both", "nameEs": "Prueba", "nameEn": "Test",
-            "short": "PR", "icon": "Test Item's.png", "enabled": true, "sortOrder": 9999 })),
-    )
-    .await;
-    assert_eq!(s, StatusCode::OK);
-    let (s, _) = call(
-        &h,
-        "PUT",
-        "/api/admin/catalog/items/prueba",
-        Some(ADMIN),
-        Some(json!({ "id": "prueba", "group": "tool", "age": "both", "nameEs": "Prueba", "nameEn": "Test",
-            "short": "PR", "icon": "javascript:alert(1)", "enabled": true, "sortOrder": 9999 })),
-    )
-    .await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
-
-    let (s, _, _) = raw(
-        &h,
-        "DELETE",
-        "/api/admin/media/items/Test%20Item%27s.png",
-        Some(ADMIN),
-        vec![],
-    )
-    .await;
-    assert_eq!(s, StatusCode::NO_CONTENT);
-    let (s, _, _) = raw(
-        &h,
-        "GET",
-        "/api/media/items/Test%20Item%27s.png",
-        None,
-        vec![],
-    )
-    .await;
-    assert_eq!(s, StatusCode::NOT_FOUND);
+    // The audit log knows who changed it, and the avatar survives a restart.
+    let (s, _, body) = raw(&h, "POST", up, Some(ADMIN), TINY_PNG.to_vec()).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let racer: Value = serde_json::from_slice(&body).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let reloaded = db::load(&h.pool).await.unwrap().unwrap();
+    let r = &reloaded.racers[reloaded.idx("ralbat").unwrap()].racer;
+    assert_eq!(r.avatar_url.as_deref(), racer["avatarUrl"].as_str());
+    let (_, audit) = call(&h, "GET", "/api/admin/audit", Some(ADMIN), None).await;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["action"] == "racer.photo.upload")
+    );
 }
 
 #[tokio::test]

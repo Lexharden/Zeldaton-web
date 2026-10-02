@@ -73,12 +73,11 @@ pub fn router(hub: AppState) -> Router<AppState> {
             put(put_objective).delete(delete_objective),
         )
         .route(
-            "/media/items",
-            get(crate::media::list)
-                .post(crate::media::upload)
-                .layer(DefaultBodyLimit::max(crate::media::MAX_BYTES + 4096)),
+            "/racers/{id}/photo",
+            post(crate::media::upload_photo)
+                .layer(DefaultBodyLimit::max(crate::media::MAX_BYTES + 4096))
+                .delete(crate::media::delete_photo),
         )
-        .route("/media/items/{file}", delete(crate::media::delete))
         .route("/audit", get(audit))
         .route("/donations", get(donations))
         .layer(middleware::from_fn_with_state(hub, authenticate));

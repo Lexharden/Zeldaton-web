@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { Trash2, Upload } from 'lucide-vue-next'
 import { adminApi } from '../api/AdminApi'
 import { messageOf, useToasts } from '../composables/useToasts'
 import type { ChannelInput, NewRacerInput } from '../types'
 import type { Racer } from '@/types/racer'
 import { AMERICAS_TIMEZONES, currentOffset, findZone } from '@/config/timezones'
+import Avatar from '@/components/common/Avatar.vue'
+import { shrinkPicture } from '@/utils/media'
 import Modal from './Modal.vue'
 
 /** Create (no `racer`) or edit a racer. On create the server returns the ingest token, shown once by the parent. */
@@ -18,12 +21,45 @@ const form = ref({
   displayName: '',
   timezone: 'America/Mexico_City',
   country: '',
-  avatarUrl: '',
   twitch: '',
   tiktok: '',
   youtube: '',
 })
 const busy = ref(false)
+
+// The photo is uploaded, not typed: the chosen file waits here until the racer is saved.
+const PHOTO_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const fileInput = ref<HTMLInputElement | null>(null)
+const pendingFile = ref<File | null>(null)
+const previewUrl = ref('')
+const removePhoto = ref(false)
+const currentPhoto = computed(() => (removePhoto.value ? '' : (props.racer?.avatarUrl ?? '')))
+const shownPhoto = computed(() => previewUrl.value || currentPhoto.value || undefined)
+
+function clearPending() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = ''
+  pendingFile.value = null
+}
+function onPhoto(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!PHOTO_TYPES.includes(file.type)) {
+    toasts.error('La foto debe ser PNG, JPG o WebP.')
+    return
+  }
+  clearPending()
+  pendingFile.value = file
+  previewUrl.value = URL.createObjectURL(file)
+  removePhoto.value = false
+}
+function dropPhoto() {
+  clearPending()
+  removePhoto.value = !!props.racer?.avatarUrl
+}
+onBeforeUnmount(clearPending)
 
 const zones = (() => {
   try {
@@ -79,11 +115,12 @@ watch(
       displayName: racer?.displayName ?? '',
       timezone: racer?.timezone ?? 'America/Mexico_City',
       country: racer?.country ?? '',
-      avatarUrl: racer?.avatarUrl ?? '',
       twitch: handle('twitch'),
       tiktok: handle('tiktok'),
       youtube: handle('youtube'),
     }
+    clearPending()
+    removePhoto.value = false
     otherZone.value = !findZone(form.value.timezone)
     const now = new Date()
     offsets.value = Object.fromEntries(
@@ -127,19 +164,32 @@ async function save() {
       displayName: form.value.displayName.trim(),
       timezone: form.value.timezone.trim(),
       country: form.value.country.trim() || undefined,
-      avatarUrl: form.value.avatarUrl.trim() || undefined,
       channels: channels(),
     }
+    let id = props.racer?.id ?? ''
+    let token: string | undefined
     if (editing.value && props.racer) {
       await adminApi.updateRacer(props.racer.id, base)
-      toasts.success('Corredor guardado.')
-      emit('saved')
     } else {
       const input: NewRacerInput = { id: form.value.id.trim(), ...base }
       const out = await adminApi.createRacer(input)
-      toasts.success('Corredor creado.')
-      emit('saved', out.token)
+      id = input.id
+      token = out.token
     }
+    // The photo goes last: the racer exists and is saved even if the picture fails.
+    let photoError = ''
+    try {
+      if (pendingFile.value) {
+        await adminApi.uploadRacerPhoto(id, await shrinkPicture(pendingFile.value))
+      } else if (removePhoto.value) {
+        await adminApi.deleteRacerPhoto(id)
+      }
+    } catch (e) {
+      photoError = messageOf(e)
+    }
+    toasts.success(editing.value ? 'Corredor guardado.' : 'Corredor creado.')
+    if (photoError) toasts.error(`La foto no se pudo guardar: ${photoError}`)
+    emit('saved', token)
     emit('close')
   } catch (e) {
     toasts.error(messageOf(e))
@@ -213,8 +263,35 @@ async function save() {
         </div>
       </div>
       <div>
-        <label class="a-label" for="rf-avatar">Foto (URL)</label>
-        <input id="rf-avatar" v-model="form.avatarUrl" class="a-input" placeholder="https://…" />
+        <span class="a-label">Foto</span>
+        <div class="flex items-center gap-4">
+          <Avatar
+            :name="form.displayName || form.id || '?'"
+            :src="shownPhoto"
+            :seed="form.id || racer?.id"
+            :size="72"
+          />
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            class="hidden"
+            @change="onPhoto"
+          />
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="a-btn" @click="fileInput?.click()">
+              <Upload class="size-4" />{{ shownPhoto ? 'Cambiar foto' : 'Subir foto' }}
+            </button>
+            <button v-if="shownPhoto" type="button" class="a-btn" @click="dropPhoto">
+              <Trash2 class="size-4" />Quitar
+            </button>
+          </div>
+        </div>
+        <p class="a-hint">
+          PNG, JPG o WebP; se ajusta a 512 px. Se guarda al pulsar «{{
+            editing ? 'Guardar' : 'Crear corredor'
+          }}».
+        </p>
       </div>
       <fieldset class="grid gap-4 sm:grid-cols-3">
         <legend class="a-label">Canales (usuario, sin @)</legend>

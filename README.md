@@ -52,8 +52,8 @@ validates the same files, so the two sides cannot drift apart silently.
 | Public catalog | `GET /api/catalog` (items and objectives by Link, enabled only) + `CATALOG_UPDATED` on the socket |
 | Organizer `/api/admin` | Session cookie (roles admin / moderator) or Bearer `ADMIN_TOKEN` (emergency): overview, event start/pause/resume/finish, racers + channels, tokens, pause/resume/force-close/reset-day/adjust-time/finish, catalog, accounts, audit log, time donations |
 
-Item pictures: `GET /api/media/items/<file>` (public) serves `UPLOADS_DIR/items` first, then `ART_DIR` (the images
-in `public/art/items`). In Docker the uploads live on the data volume (`/data/uploads`).
+Racer photos: uploaded in the panel (`POST /api/admin/racers/:id/photo`), kept in `UPLOADS_DIR/racers` (the data volume in
+Docker) and served publicly at `/api/media/racers/<file>`.
 
 Every organizer action lands in the `audit_log` table, the official record of the session (with who did it).
 
@@ -71,8 +71,8 @@ ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed O
 | --- | --- |
 | Panel | Live dashboard: **start / pause / finish the event**, who is connected, clocks, progress, alerts, activity |
 | Event | Start/end, daily time, reset hour, win condition, objectives required to finish, **limits for time from donations** |
-| Racers | Create/edit, channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
-| Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. An item's **icon is just a file name** (`Hookshot-Art.png`): pick one from the picture library or **upload a new one** (shrunk to 256 px in the browser, name kept). The site and HiveShock update on their own |
+| Racers | Create/edit, **upload their photo** (shrunk in the browser; replaces the previous one), channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
+| Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. An item's **icon is just a file name** (`Hookshot-Art.png`) of a picture in `public/art/items`; the site loads it from that folder (a new picture needs a rebuild). The site and HiveShock update on their own |
 | Donations | Time that TikTok gifts / Twitch bits added or removed, per racer (today and whole event), the **top donors** (who moved the clock most) and one by one |
 | Audit | Who did what and when |
 | Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |

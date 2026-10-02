@@ -26,8 +26,7 @@ describe('item pictures', () => {
       expect(validIconName(bad), bad).toBe(false)
   })
 
-  it('points a bare file name at the media route, encoded; older paths pass through', () => {
-    // Tests run with VITE_MOCK_MODE unset => mock mode => the files shipped in public/art/items.
+  it('points a bare file name at the public/art/items folder, encoded; older paths pass through', () => {
     expect(itemIconUrl("Goron's Ruby.png")).toBe("/art/items/Goron's%20Ruby.png")
     expect(itemIconUrl('/art/items/x.png')).toBe('/art/items/x.png')
     expect(itemIconUrl('https://example.com/x.png')).toBe('https://example.com/x.png')

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ArrowDown, ArrowUp, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { t } from '@/i18n'
 import AgeBadge from '@/components/common/AgeBadge.vue'
 import { AGE_ORDER, GROUP_ORDER } from '@/utils/catalog'
@@ -9,7 +9,6 @@ import type { CatalogAge, CatalogItem, CatalogObjective } from '@/types/catalog'
 import { adminApi } from '../api/AdminApi'
 import { confirm } from '../composables/useConfirm'
 import { messageOf, useToasts } from '../composables/useToasts'
-import MediaPicker from '../components/MediaPicker.vue'
 import Modal from '../components/Modal.vue'
 import PageHeader from '../components/PageHeader.vue'
 
@@ -18,7 +17,6 @@ const tab = ref<'items' | 'objectives'>('items')
 const items = ref<CatalogItem[]>([])
 const objectives = ref<CatalogObjective[]>([])
 const version = ref('')
-const pickerOpen = ref(false)
 
 async function load() {
   try {
@@ -326,9 +324,6 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
         <label class="flex items-center gap-2 text-sm text-muted"
           ><input v-model="showHidden" type="checkbox" />Mostrar ocultos</label
         >
-        <button v-if="tab === 'items'" type="button" class="a-btn" @click="pickerOpen = true">
-          <ImageIcon class="size-4" />Imágenes
-        </button>
       </div>
     </div>
 
@@ -580,11 +575,11 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
                 placeholder="Hookshot-Art.png"
                 autocomplete="off"
               />
-              <button type="button" class="a-btn shrink-0" @click="pickerOpen = true">
-                <ImageIcon class="size-4" />Elegir
-              </button>
             </div>
-            <p class="a-hint">Solo el nombre del archivo. Elige una imagen o sube una nueva.</p>
+            <p class="a-hint">
+              Solo el nombre del archivo, tal como está en la carpeta de imágenes del sitio
+              (public/art/items), por ejemplo Hookshot-Art.png.
+            </p>
           </div>
           <div>
             <label class="a-label" for="it-order">Orden</label
@@ -609,20 +604,6 @@ async function move<T extends { id: string; age: CatalogAge; sortOrder: number }
         </div>
       </form>
     </Modal>
-
-    <MediaPicker
-      :open="pickerOpen"
-      :selected="itemForm?.icon"
-      @close="pickerOpen = false"
-      @pick="
-        (name) => {
-          if (itemForm) {
-            itemForm.icon = name
-            pickerOpen = false
-          }
-        }
-      "
-    />
 
     <Modal
       :open="!!objectiveForm"

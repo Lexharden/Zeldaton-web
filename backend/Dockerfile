@@ -15,13 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && useradd --system --uid 10001 zeldathon \
     && mkdir -p /data/uploads && chown -R zeldathon /data
 COPY --from=build /zeldathon-server /usr/local/bin/zeldathon-server
-# Item pictures that ship with the site; uploads from the panel go to /data/uploads (the volume).
-COPY public/art/items /app/art-items
 USER zeldathon
 ENV BIND=0.0.0.0:8080 \
     DATABASE_URL=sqlite:///data/zeldathon.db?mode=rwc \
     UPLOADS_DIR=/data/uploads \
-    ART_DIR=/app/art-items \
     RUST_LOG=info
 VOLUME /data
 EXPOSE 8080

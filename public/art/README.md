@@ -19,8 +19,9 @@ Item ids: master-sword, hookshot, longshot, bow, bombs, boomerang, megaton-hamme
 iron-boots, mirror-shield.
 
 Item pictures (`items/`) are referenced from the catalog by **file name only**
-(admin panel → Catalog → Icon). The backend serves them from `/api/media/items/<name>`; pictures
-uploaded in the panel are stored on the server and need no commit. Keep new files here at most
-256 px on the longest side, with a transparent background.
+(admin panel → Catalog → Icon, e.g. `Hookshot-Art.png`): the site loads `/art/items/<name>` straight
+from this folder, so a new picture is a file here plus a rebuild. Keep them at most 256 px on the
+longest side, with a transparent background. Racer photos are different: they are uploaded in the
+panel (Racers) and need no commit.
 
 Names can be changed in `src/config/artwork.ts`.

@@ -5,7 +5,6 @@ import type { Racer } from '@/types/racer'
 import type {
   AdminCatalog,
   AuditRow,
-  MediaFile,
   DonationsResponse,
   EventAction,
   EventPatchInput,
@@ -156,18 +155,15 @@ export class AdminApi {
   resetEvent = (body: { confirm: string; startAtUtc?: string; leaveRehearsal: boolean }) =>
     this.request<EventInfo>('POST', '/event/reset', body)
 
-  // ---- item pictures
-  mediaItems = () => this.request<MediaFile[]>('GET', '/media/items')
-  deleteMedia = (name: string) =>
-    this.request<void>('DELETE', `/media/items/${encodeURIComponent(name)}`)
-  /** Uploads the picture itself (not JSON) under `name`. */
-  async uploadMedia(name: string, file: Blob): Promise<MediaFile> {
+  // ---- racer photos
+  /** Uploads the photo itself (not JSON); the server stores it and points the racer's avatar at it. */
+  async uploadRacerPhoto(id: string, file: Blob): Promise<Racer> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (this.csrf) headers['X-CSRF-Token'] = this.csrf
     headers['Content-Type'] = file.type || 'application/octet-stream'
     let res: Response
     try {
-      res = await this.fetcher(`${this.base}/media/items?name=${encodeURIComponent(name)}`, {
+      res = await this.fetcher(`${this.base}/racers/${encodeURIComponent(id)}/photo`, {
         method: 'POST',
         credentials: 'include',
         headers,
@@ -189,12 +185,14 @@ export class AdminApi {
         res.status,
         err.error ?? 'http',
         res.status === 413
-          ? 'La imagen pesa demasiado (máximo 2 MB).'
+          ? 'La foto pesa demasiado (máximo 2 MB).'
           : (err.message ?? `Error ${res.status}`),
       )
     }
-    return data as MediaFile
+    return data as Racer
   }
+  deleteRacerPhoto = (id: string) =>
+    this.request<Racer>('DELETE', `/racers/${encodeURIComponent(id)}/photo`)
 
   // ---- audit
   audit = (limit = 100) => this.request<AuditRow[]>('GET', `/audit?limit=${limit}`)

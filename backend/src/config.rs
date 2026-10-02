@@ -20,11 +20,9 @@ pub struct Config {
     /// COOKIE_SECURE=true|false forces the session cookie's `Secure` flag; unset = automatic
     /// (Secure everywhere except plain http on localhost, where browsers would drop it).
     pub cookie_secure: Option<bool>,
-    /// UPLOADS_DIR: where pictures uploaded from the panel are kept (`<dir>/items`). In Docker
+    /// UPLOADS_DIR: where racer photos uploaded from the panel are kept (`<dir>/racers`). In Docker
     /// this lives on the data volume.
     pub uploads_dir: String,
-    /// ART_DIR: the item pictures that ship with the site (read-only, served beside the uploads).
-    pub art_dir: String,
 }
 
 impl Config {
@@ -66,10 +64,6 @@ impl Config {
                 .ok()
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| "uploads".into()),
-            art_dir: env::var("ART_DIR")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .unwrap_or_else(|| "../public/art/items".into()),
         }
     }
 }

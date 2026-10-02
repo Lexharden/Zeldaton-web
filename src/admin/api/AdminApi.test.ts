@@ -127,23 +127,27 @@ describe('AdminApi', () => {
     expect(api.csrf).toBeNull()
   })
 
-  it('uploads a picture as the raw body under its own name, with the CSRF token', async () => {
+  it("uploads a racer's photo as the raw body, with the CSRF token, and can remove it", async () => {
     const { fetcher, calls } = fakeFetch([
       { body: { user: { id: 1, username: 'ana', role: 'admin' }, csrfToken: 'csrf-9' } },
-      { status: 201, body: { name: "Goron's Ruby.png", bytes: 3, uploaded: true } },
+      { status: 201, body: { id: 'ralbat', avatarUrl: '/api/media/racers/ralbat-1.png' } },
       { status: 413, body: {} },
+      { body: { id: 'ralbat' } },
     ])
     const api = new AdminApi('/api/admin', fetcher)
     await api.login('ana', 'pw')
     const file = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
-    const out = await api.uploadMedia("Goron's Ruby.png", file)
-    expect(out.uploaded).toBe(true)
-    expect(calls[1].url).toBe("/api/admin/media/items?name=Goron's%20Ruby.png")
+    const out = await api.uploadRacerPhoto('ralbat', file)
+    expect(out.avatarUrl).toBe('/api/media/racers/ralbat-1.png')
+    expect(calls[1].url).toBe('/api/admin/racers/ralbat/photo')
     expect(calls[1].init.method).toBe('POST')
     expect(calls[1].init.body).toBe(file)
     expect(headersOf(calls[1].init)['X-CSRF-Token']).toBe('csrf-9')
     expect(headersOf(calls[1].init)['Content-Type']).toBe('image/png')
-    await expect(api.uploadMedia('x.png', file)).rejects.toMatchObject({ status: 413 })
+    await expect(api.uploadRacerPhoto('ralbat', file)).rejects.toMatchObject({ status: 413 })
+    await api.deleteRacerPhoto('ralbat')
+    expect(calls[3].url).toBe('/api/admin/racers/ralbat/photo')
+    expect(calls[3].init.method).toBe('DELETE')
   })
 
   it('resets the event with the confirmation word, a new start and the rehearsal flag', async () => {

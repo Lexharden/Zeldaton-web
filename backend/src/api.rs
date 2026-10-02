@@ -31,7 +31,7 @@ pub fn router() -> Router<AppState> {
             HeaderValue::from_static("no-store"),
         ));
     // Pictures are cacheable (they set their own Cache-Control), unlike the live race data.
-    live.route("/media/items/{file}", get(crate::media::serve))
+    live.route("/media/racers/{file}", get(crate::media::serve))
 }
 
 async fn health(State(hub): State<AppState>) -> Json<Value> {

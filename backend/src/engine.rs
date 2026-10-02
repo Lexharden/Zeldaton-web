@@ -1586,8 +1586,8 @@ impl RaceState {
         if p.country.is_some() {
             r.country = p.country;
         }
-        if p.avatar_url.is_some() {
-            r.avatar_url = p.avatar_url;
+        if let Some(url) = p.avatar_url {
+            r.avatar_url = Some(url).filter(|u| !u.trim().is_empty());
         }
         if let Some(ch) = &p.channels {
             r.channels = build_channels(ch);

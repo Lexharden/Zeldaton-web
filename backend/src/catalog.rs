@@ -98,6 +98,22 @@ fn text_ok(s: &str, max: usize) -> bool {
     !t.is_empty() && t.chars().count() <= max
 }
 
+/// An icon is the file name of a picture in the site's `public/art/items` folder: letters, digits,
+/// spaces and `_ - . \' ( )`, ending in .png, .jpg, .jpeg or .webp. No folders, no hidden files.
+pub fn valid_icon_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    !name.is_empty()
+        && name.chars().count() <= 120
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '\'' | '(' | ')' | ' '))
+        && [".png", ".jpg", ".jpeg", ".webp"]
+            .iter()
+            .any(|ext| lower.ends_with(ext))
+}
+
 impl CatalogItem {
     pub fn validate(&self) -> Result<(), String> {
         if !valid_id(&self.id) {
@@ -113,7 +129,7 @@ impl CatalogItem {
             return Err("short is required and limited to 4 characters".into());
         }
         if let Some(icon) = &self.icon
-            && !(crate::media::valid_name(icon)
+            && !(valid_icon_name(icon)
                 // Older items may still hold a site path or an https URL.
                 || (icon.len() <= 200 && (icon.starts_with('/') || icon.starts_with("https://"))))
         {
@@ -872,5 +888,29 @@ mod tests {
         assert_eq!(v1, c.version());
         c.items[0].name_en = "Renamed".into();
         assert_ne!(v1, c.version());
+    }
+
+    #[test]
+    fn icons_are_plain_picture_file_names() {
+        for ok in [
+            "Hookshot-Art.png",
+            "Goron's_Ruby_-_NP_OOT_Player's_Guide.png",
+            "a b (1).WEBP",
+        ] {
+            assert!(valid_icon_name(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            ".hidden.png",
+            "../x.png",
+            "a/b.png",
+            "a\\b.png",
+            "x.svg",
+            "x.png.exe",
+            "noext",
+            "<b>.png",
+        ] {
+            assert!(!valid_icon_name(bad), "{bad}");
+        }
     }
 }
