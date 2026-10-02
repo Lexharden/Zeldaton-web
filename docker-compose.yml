@@ -1,7 +1,7 @@
 # Frontend + backend in Docker; nginx runs natively on the VPS (see deploy/nginx.conf).
 #   cp .env.example .env   (set ADMIN_TOKEN, SITE_ADDRESS)   then:
 #   docker compose up -d --build
-# Both services listen on localhost only; the host nginx is the single public entry point.
+# Both services listen on localhost only (ports: BACKEND_PORT / FRONTEND_PORT in .env); the host nginx is the single public entry point.
 services:
   backend:
     build:
@@ -20,7 +20,7 @@ services:
     volumes:
       - zeldathon_data:/data
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
 
   frontend:
     build:
@@ -35,7 +35,7 @@ services:
         VITE_GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID:-}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:${FRONTEND_PORT:-8081}:8080"
 
 volumes:
   zeldathon_data:

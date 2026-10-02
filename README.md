@@ -86,8 +86,8 @@ change it with `VITE_PROXY_TARGET`), so `npm run dev` + `cargo run -p zeldathon-
 
 ## Deploy (Docker + native nginx on the VPS)
 
-Backend and website run as containers bound to localhost (`127.0.0.1:8080` / `:8081`); the nginx
-installed on the VPS terminates TLS and proxies to them.
+Backend and website run as containers bound to localhost (`127.0.0.1:8080` / `:8081`; change the ports with
+`BACKEND_PORT` / `FRONTEND_PORT` in `.env`); the nginx installed on the VPS terminates TLS and proxies to them.
 
 ```bash
 cp .env.example .env            # set SITE_ADDRESS and ADMIN_TOKEN (openssl rand -hex 32)

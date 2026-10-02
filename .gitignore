@@ -13,3 +13,9 @@ dev-tokens.json
 backend/.env
 # Runtime data folder (docker volume). Anchored: a bare `data/` also ignored src/data/.
 /data/
+
+# This project uses npm (package-lock.json); other package managers' lockfiles stay out.
+bun.lock
+bun.lockb
+yarn.lock
+pnpm-lock.yaml
