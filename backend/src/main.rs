@@ -106,12 +106,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    if std::env::var("DISCORD_WEBHOOK_URL").is_ok_and(|v| !v.trim().is_empty())
-        && cfg.discord_webhook_url.is_none()
-    {
-        tracing::warn!("DISCORD_WEBHOOK_URL is not a Discord webhook URL: announcements are off");
+    for (var, ok) in [
+        ("DISCORD_WEBHOOK_URL", cfg.discord_webhook_url.is_some()),
+        (
+            "DISCORD_STAFF_WEBHOOK_URL",
+            cfg.discord_staff_webhook_url.is_some(),
+        ),
+        ("DISCORD_STAFF_ROLE_ID", cfg.discord_staff_role_id.is_some()),
+    ] {
+        if std::env::var(var).is_ok_and(|v| !v.trim().is_empty()) && !ok {
+            tracing::warn!("{var} is not valid: that Discord notification feature is off");
+        }
     }
-    zeldathon_server::discord::spawn(hub.clone());
+    hub.load_notify_settings().await;
+    zeldathon_server::notify::dispatch::spawn(hub.clone());
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on http://{}", cfg.bind);

@@ -1045,60 +1045,95 @@ async fn set_donor_hidden(
     Ok(Json(json!({ "ok": true })))
 }
 
-// ---- Discord announcements ----------------------------------------------------------------------
+// ---- Discord notifications ------------------------------------------------------------------------
 
-/// State of the Discord integration. The webhook URL itself is never returned.
+/// State of the Discord notifications: each channel, every kind of notice with its switch, and the
+/// thresholds. The webhook URLs themselves are never sent to the browser.
 async fn discord_status(State(hub): State<AppState>) -> Json<Value> {
-    let enabled = matches!(
-        db::setting(&hub.pool, crate::discord::ENABLED_KEY).await,
-        Ok(Some(v)) if v == "true"
-    );
-    let status = hub
-        .discord
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
+    use crate::notify::{Channel, Kind};
+    let settings = hub.notify_settings();
+    let channel = |ch: Channel| {
+        let st = hub.channel_status(ch);
+        let mut v = json!({
+            "configured": hub.cfg.webhook_for(ch).is_some(),
+            "enabled": settings.channel_enabled(ch),
+            "lastSentAt": st.last_sent_at.map(iso),
+            "lastError": st.last_error,
+            "dropped": st.dropped,
+            "queued": st.queued,
+        });
+        if ch == Channel::Staff {
+            v["mentionsRole"] = json!(hub.cfg.discord_staff_role_id.is_some());
+        }
+        v
+    };
+    let kinds: Vec<Value> = Kind::ALL
+        .iter()
+        .map(|k| {
+            json!({
+                "kind": k.key(),
+                "audience": k.channel().as_str(),
+                "label": k.label(),
+                "critical": k.critical(),
+                "enabled": settings.kind_enabled(*k),
+            })
+        })
+        .collect();
     Json(json!({
-        "configured": hub.cfg.discord_webhook_url.is_some(),
-        "enabled": enabled,
         "rehearsal": hub.read(|s| s.event.rehearsal),
-        "lastSentAt": status.last_sent_at.map(iso),
-        "lastError": status.last_error,
+        "channels": { "public": channel(Channel::Public), "staff": channel(Channel::Staff) },
+        "kinds": kinds,
+        "thresholds": settings.thresholds,
     }))
 }
 
-/// Turns the "X is live" announcements on or off.
+/// Partial update of the Discord settings: channel switches, per-kind switches and thresholds.
 async fn set_discord(
     State(hub): State<AppState>,
     Extension(p): Extension<Principal>,
-    Json(body): Json<VisibilityBody>,
+    Json(patch): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     p.require(Role::Admin)?;
-    db::set_setting(
-        &hub.pool,
-        crate::discord::ENABLED_KEY,
-        if body.enabled { "true" } else { "false" },
-    )
-    .await
-    .map_err(ApiError::internal)?;
+    let mut next = hub.notify_settings();
+    next.patch(&patch).map_err(ApiError::BadRequest)?;
+    crate::notify::settings::save(&hub.pool, &next)
+        .await
+        .map_err(ApiError::internal)?;
+    hub.set_notify_settings(next);
     hub.audit_as(
         &p.actor,
-        "discord.toggle",
+        "discord.settings",
         None,
-        json!({ "enabled": body.enabled }),
+        json!({ "patch": patch }),
     );
-    Ok(Json(json!({ "enabled": body.enabled })))
+    Ok(discord_status(State(hub)).await)
 }
 
-/// Sends a sample message to the channel, to check the webhook before the event.
+#[derive(Deserialize, Default)]
+struct TestBody {
+    channel: Option<String>,
+}
+
+/// Sends a sample message to a channel, to check the webhook before the event.
 async fn discord_test(
     State(hub): State<AppState>,
     Extension(p): Extension<Principal>,
+    body: Option<Json<TestBody>>,
 ) -> Result<Json<Value>, ApiError> {
     p.require(Role::Admin)?;
-    crate::discord::send_test(&hub)
+    let name = body
+        .and_then(|b| b.0.channel)
+        .unwrap_or_else(|| "public".into());
+    let channel = crate::notify::Channel::parse(&name)
+        .ok_or_else(|| ApiError::BadRequest("channel must be `public` or `staff`".into()))?;
+    crate::notify::dispatch::send_test(&hub, channel)
         .await
         .map_err(|e| ApiError::BadRequest(format!("Discord: {e}")))?;
-    hub.audit_as(&p.actor, "discord.test", None, json!({}));
+    hub.audit_as(
+        &p.actor,
+        "discord.test",
+        None,
+        json!({ "channel": channel.as_str() }),
+    );
     Ok(Json(json!({ "ok": true })))
 }

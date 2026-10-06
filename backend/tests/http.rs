@@ -35,10 +35,18 @@ impl Harness {
 }
 
 async fn harness() -> Harness {
-    harness_with(None).await
+    harness_with(Hooks::default()).await
 }
 
-async fn harness_with(discord_webhook_url: Option<String>) -> Harness {
+/// Discord webhook URLs (and the referees' role) the server under test is configured with.
+#[derive(Default)]
+struct Hooks {
+    public: Option<String>,
+    staff: Option<String>,
+    role: Option<String>,
+}
+
+async fn harness_with(hooks: Hooks) -> Harness {
     let pool = db::connect("sqlite::memory:").await.unwrap();
     db::migrate(&pool).await.unwrap();
     let seeded = seed::build(Utc::now());
@@ -59,7 +67,9 @@ async fn harness_with(discord_webhook_url: Option<String>) -> Harness {
         admin_user: "admin".into(),
         admin_password: None,
         cookie_secure: Some(false),
-        discord_webhook_url,
+        discord_webhook_url: hooks.public,
+        discord_staff_webhook_url: hooks.staff,
+        discord_staff_role_id: hooks.role,
         public_url: "https://zeldaton.example".into(),
         uploads_dir: std::env::temp_dir()
             .join(format!("zeldathon-test-{}", std::process::id()))
@@ -1764,53 +1774,13 @@ async fn the_public_donors_board_shows_only_what_is_meant_and_the_organizer_cont
     assert!(board["donors"].as_array().unwrap().is_empty());
 }
 
-#[tokio::test]
-async fn the_discord_switch_is_an_organizer_setting_and_never_leaks_the_webhook() {
-    let h = harness().await; // no DISCORD_WEBHOOK_URL in the test config
-    let (s, _) = call(&h, "GET", "/api/admin/discord", None, None).await;
-    assert_eq!(s, StatusCode::UNAUTHORIZED);
+// ---- Discord notifications ----------------------------------------------------------------------
 
-    let (s, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(
-        (st["configured"].clone(), st["enabled"].clone()),
-        (json!(false), json!(false))
-    );
-    assert!(st["lastSentAt"].is_null() && st["lastError"].is_null());
-    assert!(!st.to_string().contains("webhooks"));
+type Seen = std::sync::Arc<std::sync::Mutex<Vec<Value>>>;
 
-    let (s, st) = call(
-        &h,
-        "PUT",
-        "/api/admin/discord",
-        Some(ADMIN),
-        Some(json!({ "enabled": true })),
-    )
-    .await;
-    assert_eq!((s, st["enabled"].clone()), (StatusCode::OK, json!(true)));
-    let (_, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
-    assert_eq!(st["enabled"], true);
-
-    // Without a configured webhook the test message explains what is missing.
-    let (s, err) = call(&h, "POST", "/api/admin/discord/test", Some(ADMIN), None).await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
-    assert!(err.to_string().contains("DISCORD_WEBHOOK_URL"), "{err}");
-
-    let (_, audit) = call(&h, "GET", "/api/admin/audit", Some(ADMIN), None).await;
-    assert!(
-        audit
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|a| a["action"] == "discord.toggle")
-    );
-}
-
-#[tokio::test]
-async fn a_racer_going_live_is_announced_once_on_discord_with_their_links() {
-    use std::sync::{Arc, Mutex};
-    // A stand-in for the Discord webhook that keeps what it receives.
-    let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
+/// A stand-in for a Discord webhook that keeps what it receives.
+async fn webhook() -> (String, Seen) {
+    let seen: Seen = Default::default();
     let sink = seen.clone();
     let app = axum::Router::new().route(
         "/hook",
@@ -1823,85 +1793,535 @@ async fn a_racer_going_live_is_announced_once_on_discord_with_their_links() {
         }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let hook = format!("http://{}/hook", listener.local_addr().unwrap());
+    let url = format!("http://{}/hook", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, seen)
+}
 
-    let h = harness_with(Some(hook)).await;
-    zeldathon_server::discord::spawn_with(
+fn titles(seen: &Seen) -> Vec<String> {
+    seen.lock()
+        .unwrap()
+        .iter()
+        .map(|m| m["embeds"][0]["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Waits (up to ~5 s) until `ok` holds for the titles received so far.
+async fn eventually(seen: &Seen, what: &str, ok: impl Fn(&[String]) -> bool) {
+    for _ in 0..50 {
+        if ok(&titles(seen)) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("{what}: got {:?}", titles(seen));
+}
+
+/// The notifier with quick timing (the real one scans every 5 s and waits 30 s before "live").
+fn start_notifier(h: &Harness) {
+    zeldathon_server::notify::dispatch::spawn_with(
         h.hub.clone(),
         Duration::from_millis(40),
-        zeldathon_server::discord::Announcer::with_timing(
-            Duration::from_millis(150),
-            Duration::from_secs(60),
+        zeldathon_server::notify::scan::ScanState::with_announcer(
+            zeldathon_server::notify::scan::Announcer::with_timing(
+                Duration::from_millis(150),
+                Duration::from_secs(60),
+            ),
         ),
     );
-    call(&h, "PATCH", "/api/admin/racers/cuaco", Some(ADMIN),
-        Some(json!({ "channels": [{ "platform": "twitch", "handle": "cuaco" }, { "platform": "tiktok", "handle": "cuaco" }] }))).await;
+}
 
-    let go_live = |h: &Harness| {
-        let token = h.token("cuaco");
-        let addr = h.addr;
-        async move {
-            let mut req = format!("ws://{addr}/ingest").into_client_request().unwrap();
-            req.headers_mut()
-                .insert("authorization", format!("Bearer {token}").parse().unwrap());
-            let (mut ws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
-            send(&mut ws, json!({ "type": "HELLO" })).await;
-            send(
-                &mut ws,
-                json!({ "type": "STREAM_STATE", "live": true, "viewers": 50 }),
-            )
-            .await;
-            ws
-        }
-    };
+async fn racer_ws(h: &Harness, id: &str) -> Ws {
+    let token = h.token(id);
+    let mut req = format!("ws://{}/ingest", h.addr)
+        .into_client_request()
+        .unwrap();
+    req.headers_mut()
+        .insert("authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
+    send(&mut ws, json!({ "type": "HELLO" })).await;
+    ws
+}
 
-    // Switched off (the default) and event not running: nobody is announced.
-    let ws = go_live(&h).await;
+async fn switch_on(h: &Harness) {
+    let (s, _) = call(
+        h,
+        "PUT",
+        "/api/admin/discord",
+        Some(ADMIN),
+        Some(json!({ "publicEnabled": true, "staffEnabled": true })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_discord_settings_are_an_organizer_thing_and_never_leak_the_webhooks() {
+    let h = harness_with(Hooks {
+        public: Some("https://discord.com/api/webhooks/1/secret-public".into()),
+        staff: Some("https://discord.com/api/webhooks/2/secret-staff".into()),
+        role: Some("123456789012345678".into()),
+    })
+    .await;
+    let (s, _) = call(&h, "GET", "/api/admin/discord", None, None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let (s, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(st["channels"]["public"]["configured"], true);
+    assert_eq!(st["channels"]["staff"]["mentionsRole"], true);
+    assert_eq!(
+        st["channels"]["public"]["enabled"], false,
+        "everything starts off"
+    );
+    let text = st.to_string();
+    assert!(
+        !text.contains("secret") && !text.contains("webhooks"),
+        "{text}"
+    );
+    let kinds = st["kinds"].as_array().unwrap();
+    assert_eq!(kinds.len(), zeldathon_server::notify::Kind::ALL.len());
+    let boss = kinds.iter().find(|k| k["kind"] == "boss").unwrap();
+    assert_eq!(
+        (boss["audience"].clone(), boss["enabled"].clone()),
+        (json!("public"), json!(true))
+    );
+    assert_eq!(
+        kinds.iter().find(|k| k["kind"] == "disconnected").unwrap()["audience"],
+        "staff"
+    );
+    assert_eq!(st["thresholds"]["disconnectMinutes"], 3);
+
+    // Partial updates; the old `enabled` still switches the community channel.
+    let (s, st) = call(&h, "PUT", "/api/admin/discord", Some(ADMIN),
+        Some(json!({ "enabled": true, "kinds": { "boss": false }, "thresholds": { "lowTimeMinutes": 15 } }))).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(st["channels"]["public"]["enabled"], true);
+    assert_eq!(st["channels"]["staff"]["enabled"], false);
+    assert_eq!(
+        st["kinds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|k| k["kind"] == "boss")
+            .unwrap()["enabled"],
+        false
+    );
+    assert_eq!(st["thresholds"]["lowTimeMinutes"], 15);
+    assert_eq!(st["thresholds"]["disconnectMinutes"], 3, "untouched");
+    // It is saved: a restart loads the same settings.
+    let reloaded = zeldathon_server::notify::settings::load(&h.pool).await;
+    assert!(
+        reloaded.public_enabled && !reloaded.kind_enabled(zeldathon_server::notify::Kind::Boss)
+    );
+
+    // Bad input is refused and changes nothing.
+    for bad in [
+        json!({ "kinds": { "nope": true } }),
+        json!({ "thresholds": { "jumpPercent": 1 } }),
+        json!({ "staffEnabled": "si" }),
+    ] {
+        let (s, _) = call(&h, "PUT", "/api/admin/discord", Some(ADMIN), Some(bad)).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+    }
+    let (_, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
+    assert_eq!(st["channels"]["staff"]["enabled"], false);
+
+    // A channel without a webhook explains what is missing; an unknown channel is refused.
+    let none = harness().await;
+    let (s, err) = call(
+        &none,
+        "POST",
+        "/api/admin/discord/test",
+        Some(ADMIN),
+        Some(json!({ "channel": "staff" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert!(
+        err.to_string().contains("DISCORD_STAFF_WEBHOOK_URL"),
+        "{err}"
+    );
+    let (s, _) = call(
+        &none,
+        "POST",
+        "/api/admin/discord/test",
+        Some(ADMIN),
+        Some(json!({ "channel": "moon" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (_, audit) = call(&h, "GET", "/api/admin/audit", Some(ADMIN), None).await;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["action"] == "discord.settings")
+    );
+}
+
+#[tokio::test]
+async fn each_channel_gets_a_test_message_of_its_own() {
+    let (public_url, public) = webhook().await;
+    let (staff_url, staff) = webhook().await;
+    let h = harness_with(Hooks {
+        public: Some(public_url),
+        staff: Some(staff_url),
+        role: Some("123456789012345678".into()),
+    })
+    .await;
+    for channel in ["public", "staff"] {
+        let (s, _) = call(
+            &h,
+            "POST",
+            "/api/admin/discord/test",
+            Some(ADMIN),
+            Some(json!({ "channel": channel })),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "{channel}");
+    }
+    assert_eq!(public.lock().unwrap().len(), 1);
+    assert_eq!(staff.lock().unwrap().len(), 1);
+    assert!(titles(&public)[0].contains("está en vivo"));
+    assert!(titles(&staff)[0].contains("desconectado"));
+    // A test never pings the referees' role.
+    assert!(staff.lock().unwrap()[0].get("content").is_none());
+    let (_, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
+    assert!(
+        st["channels"]["staff"]["lastSentAt"].is_string()
+            && st["channels"]["staff"]["lastError"].is_null()
+    );
+}
+
+#[tokio::test]
+async fn community_notices_go_to_the_public_channel_once_and_referee_alerts_to_the_staff_one() {
+    let (public_url, public) = webhook().await;
+    let (staff_url, staff) = webhook().await;
+    let role = "123456789012345678";
+    let h = harness_with(Hooks {
+        public: Some(public_url),
+        staff: Some(staff_url),
+        role: Some(role.into()),
+    })
+    .await;
+    start_notifier(&h);
+    switch_on(&h).await;
+    make_event_live(&h).await;
+
+    let mut hs = racer_ws(&h, "cuaco").await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "GAME_PROGRESS", "progress": { "percentage": 10.0 } }),
+    )
+    .await;
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "gohma", "id": "b1" }),
+    )
+    .await;
+    // HiveShock repeats the same boss under another id: still one announcement.
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "gohma", "id": "b2" }),
+    )
+    .await;
+    send(
+        &mut hs,
+        json!({ "type": "GAME_PROGRESS", "progress": { "percentage": 70.0 } }),
+    )
+    .await;
+
+    // Community: live (after the short wait) and the boss, once each.
+    eventually(&public, "live and boss", |t| t.len() >= 2).await;
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let t = titles(&public);
+    assert_eq!(t.len(), 2, "{t:?}");
+    assert!(
+        t.iter().any(|x| x.contains("está en vivo"))
+            && t.iter().any(|x| x.ends_with("derrotó a Gohma")),
+        "{t:?}"
+    );
+
+    // Referees: the progress jump, with the role mention.
+    eventually(&staff, "jump", |t| {
+        t.iter().any(|x| x.contains("Progreso sospechoso"))
+    })
+    .await;
+    let jump = staff
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|m| {
+            m["embeds"][0]["title"]
+                .as_str()
+                .unwrap()
+                .contains("sospechoso")
+        })
+        .cloned()
+        .unwrap();
+    assert_eq!(jump["content"], format!("<@&{role}>"));
+    assert!(
+        jump["embeds"][0]["description"]
+            .as_str()
+            .unwrap()
+            .contains("10%")
+            && jump["embeds"][0]["description"]
+                .as_str()
+                .unwrap()
+                .contains("70%")
+    );
+
+    // An organizer action: who, what and why, to the referees only.
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/racers/cuaco/actions/adjust-time",
+        Some(ADMIN),
+        Some(json!({ "deltaSeconds": 300, "reason": "falla del stream" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    eventually(&staff, "organizer action", |t| {
+        t.iter()
+            .any(|x| x.contains("admin-token") && x.contains("ajustó el tiempo de"))
+    })
+    .await;
+    let org = staff
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|m| m["embeds"][0]["title"].as_str().unwrap().contains("ajustó"))
+        .cloned()
+        .unwrap();
+    let d = org["embeds"][0]["description"].as_str().unwrap();
+    assert!(
+        d.contains("falla del stream") && d.contains("+00:05:00"),
+        "{d}"
+    );
+    assert!(org.get("content").is_none(), "not critical: no mention");
+
+    // Running out of time: the community hears it once.
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/racers/cuaco/actions/adjust-time",
+        Some(ADMIN),
+        Some(json!({ "deltaSeconds": -86400, "reason": "prueba" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    eventually(&public, "ran out of time", |t| {
+        t.iter().any(|x| x.contains("se quedó sin tiempo"))
+    })
+    .await;
+
+    // And the winner, by an organizer finishing the racer (admin only).
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/racers/cuaco/actions/finish",
+        Some(ADMIN),
+        Some(json!({ "finalTimeSeconds": 3725, "reason": "verificado" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    eventually(&public, "winner", |t| {
+        t.iter().any(|x| x.contains("gana Zeldatón"))
+    })
+    .await;
+    let win = public
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|m| m["embeds"][0]["title"].as_str().unwrap().contains("gana"))
+        .cloned()
+        .unwrap();
+    assert!(
+        win["embeds"][0]["description"]
+            .as_str()
+            .unwrap()
+            .contains("01:02:05")
+    );
+
+    // Nothing leaked across channels.
+    assert!(
+        titles(&public)
+            .iter()
+            .all(|x| !x.contains("sospechoso") && !x.contains("ajustó") && !x.contains("Evento"))
+    );
+    assert!(
+        titles(&staff)
+            .iter()
+            .all(|x| !x.contains("derrotó") && !x.contains("está en vivo") && !x.contains("gana"))
+    );
+}
+
+#[tokio::test]
+async fn switches_rehearsal_and_the_event_state_decide_who_hears_what() {
+    let (public_url, public) = webhook().await;
+    let (staff_url, staff) = webhook().await;
+    let h = harness_with(Hooks {
+        public: Some(public_url),
+        staff: Some(staff_url),
+        role: None,
+    })
+    .await;
+    start_notifier(&h);
+
+    // Everything starts off: a boss defeated tells nobody.
+    make_event_live(&h).await;
+    let mut hs = racer_ws(&h, "cuaco").await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "morpha", "id": "m1" }),
+    )
+    .await;
     tokio::time::sleep(Duration::from_millis(500)).await;
-    assert!(seen.lock().unwrap().is_empty());
-    drop(ws);
+    assert!(public.lock().unwrap().is_empty() && staff.lock().unwrap().is_empty());
 
-    // Switched on and the event running: one announcement with the racer's links.
+    // A kind can be switched off on its own.
     call(
         &h,
         "PUT",
         "/api/admin/discord",
         Some(ADMIN),
-        Some(json!({ "enabled": true })),
+        Some(json!({ "publicEnabled": true, "staffEnabled": true, "kinds": { "boss": false } })),
     )
     .await;
-    make_event_live(&h).await;
-    let ws = go_live(&h).await;
-    for _ in 0..50 {
-        if !seen.lock().unwrap().is_empty() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    {
-        let msgs = seen.lock().unwrap();
-        assert_eq!(msgs.len(), 1, "{msgs:?}");
-        let embed = &msgs[0]["embeds"][0];
-        assert!(embed["title"].as_str().unwrap().contains("Cuaco"));
-        let links = embed["fields"][0]["value"].as_str().unwrap();
-        assert!(
-            links.contains("https://zeldaton.example/racer/cuaco"),
-            "{links}"
-        );
-        assert!(
-            links.contains("(https://twitch.tv/cuaco)")
-                && links.contains("(https://tiktok.com/@cuaco)")
-        );
-        assert_eq!(msgs[0]["allowed_mentions"], json!({ "parse": [] }));
-    }
-    let (_, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
-    assert!(st["lastSentAt"].is_string() && st["lastError"].is_null());
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "volvagia", "id": "m2" }),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(
+        titles(&public).iter().all(|x| !x.contains("derrotó")),
+        "{:?}",
+        titles(&public)
+    );
 
-    // Dropping and coming back inside the cooldown does not announce again.
-    drop(ws);
+    // Rehearsal: the community hears nothing, the referees still do (tagged), so they can test.
+    call(&h, "POST", "/api/admin/event/pause", Some(ADMIN), None).await;
+    call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "rehearsal": true })),
+    )
+    .await;
+    call(&h, "POST", "/api/admin/event/resume", Some(ADMIN), None).await;
+    let before = public.lock().unwrap().len();
+    call(
+        &h,
+        "PUT",
+        "/api/admin/discord",
+        Some(ADMIN),
+        Some(json!({ "kinds": { "boss": true } })),
+    )
+    .await;
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "barinade", "id": "m3" }),
+    )
+    .await;
+    call(
+        &h,
+        "POST",
+        "/api/admin/racers/cuaco/actions/pause",
+        Some(ADMIN),
+        Some(json!({ "reason": "ensayo" })),
+    )
+    .await;
+    eventually(&staff, "rehearsal staff notice", |t| {
+        t.iter().any(|x| x.starts_with("[ENSAYO] "))
+    })
+    .await;
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let _ws = go_live(&h).await;
-    tokio::time::sleep(Duration::from_millis(800)).await;
-    assert_eq!(seen.lock().unwrap().len(), 1);
+    assert_eq!(
+        public.lock().unwrap().len(),
+        before,
+        "no community notices in a rehearsal"
+    );
+    assert!(titles(&public).iter().all(|x| !x.contains("Barinade")));
+
+    // Event states reach the referees (the event ended: still heard).
+    call(
+        &h,
+        "POST",
+        "/api/admin/event/finish",
+        Some(ADMIN),
+        Some(json!({ "reason": "fin" })),
+    )
+    .await;
+    eventually(&staff, "event finished", |t| {
+        t.iter().any(|x| x.contains("Evento finalizado"))
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn one_off_notices_are_not_repeated_after_a_restart_and_a_reset_starts_clean() {
+    let (public_url, public) = webhook().await;
+    let hooks = || async {
+        Hooks {
+            public: Some(public_url.clone()),
+            staff: None,
+            role: None,
+        }
+    };
+    let h = harness_with(hooks().await).await;
+    start_notifier(&h);
+    switch_on(&h).await;
+    make_event_live(&h).await;
+    let mut hs = racer_ws(&h, "cuaco").await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "gohma", "id": "r1" }),
+    )
+    .await;
+    eventually(&public, "boss", |t| t.iter().any(|x| x.contains("Gohma"))).await;
+    let boss_count = |p: &Seen| titles(p).iter().filter(|x| x.contains("Gohma")).count();
+    assert_eq!(boss_count(&public), 1);
+
+    // The key is in the database: "a restart" (a new server over the same database) knows it.
+    assert!(
+        !zeldathon_server::db::notice_reserve(&h.pool, "boss:cuaco:gohma", Utc::now())
+            .await
+            .unwrap()
+    );
+    // A reset (rehearsal, paused) forgets every key, so the real race can announce it again.
+    call(&h, "POST", "/api/admin/event/pause", Some(ADMIN), None).await;
+    call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "rehearsal": true })),
+    )
+    .await;
+    let start = (Utc::now() + chrono::Duration::days(30)).to_rfc3339();
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/event/reset",
+        Some(ADMIN),
+        Some(json!({ "confirm": "REINICIAR", "startAtUtc": start })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert!(
+        zeldathon_server::db::notice_reserve(&h.pool, "boss:cuaco:gohma", Utc::now())
+            .await
+            .unwrap()
+    );
 }

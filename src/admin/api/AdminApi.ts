@@ -5,6 +5,8 @@ import type { Racer } from '@/types/racer'
 import type {
   AdminCatalog,
   AuditRow,
+  DiscordChannelName,
+  DiscordPatch,
   DiscordStatus,
   DonationsResponse,
   EventAction,
@@ -156,11 +158,12 @@ export class AdminApi {
   resetEvent = (body: { confirm: string; startAtUtc?: string; leaveRehearsal: boolean }) =>
     this.request<EventInfo>('POST', '/event/reset', body)
 
-  // ---- Discord announcements
+  // ---- Discord notifications
   discord = () => this.request<DiscordStatus>('GET', '/discord')
-  setDiscord = (enabled: boolean) =>
-    this.request<{ enabled: boolean }>('PUT', '/discord', { enabled })
-  testDiscord = () => this.request<{ ok: true }>('POST', '/discord/test', {})
+  /** Partial update; answers with the new state. */
+  setDiscord = (patch: DiscordPatch) => this.request<DiscordStatus>('PUT', '/discord', patch)
+  testDiscord = (channel: DiscordChannelName) =>
+    this.request<{ ok: true }>('POST', '/discord/test', { channel })
 
   // ---- public donors board
   setDonorsVisible = (enabled: boolean) =>

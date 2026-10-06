@@ -125,16 +125,56 @@ export interface DonationTotals {
   removedSeconds: number
 }
 
-/** State of the Discord "X is live" announcements. The webhook URL is never sent to the browser. */
-export interface DiscordStatus {
-  /** DISCORD_WEBHOOK_URL is set on the server. */
+export type DiscordChannelName = 'public' | 'staff'
+
+/** One Discord channel. The webhook URL is never sent to the browser. */
+export interface DiscordChannel {
+  /** Its webhook is set in the server's .env. */
   configured: boolean
   /** The organizer's switch. */
   enabled: boolean
-  /** Rehearsal mode: nothing is announced while it is on. */
-  rehearsal: boolean
   lastSentAt: string | null
   lastError: string | null
+  /** Notices thrown away because the queue was full. */
+  dropped: number
+  /** Messages waiting to be posted. */
+  queued: number
+  /** Staff only: DISCORD_STAFF_ROLE_ID is set (critical alerts mention the role). */
+  mentionsRole?: boolean
+}
+
+/** One kind of notice, as the server lists it (so a new kind needs no change here). */
+export interface DiscordKind {
+  kind: string
+  audience: DiscordChannelName
+  label: string
+  /** May mention the referees' role. */
+  critical: boolean
+  enabled: boolean
+}
+
+export interface DiscordThresholds {
+  disconnectMinutes: number
+  lowTimeMinutes: number
+  jumpPercent: number
+  jumpWindowSeconds: number
+}
+
+/** State of the Discord notifications. */
+export interface DiscordStatus {
+  /** Rehearsal mode: the community channel hears nothing while it is on. */
+  rehearsal: boolean
+  channels: Record<DiscordChannelName, DiscordChannel>
+  kinds: DiscordKind[]
+  thresholds: DiscordThresholds
+}
+
+/** What the panel may change (any part; the rest stays). */
+export interface DiscordPatch {
+  publicEnabled?: boolean
+  staffEnabled?: boolean
+  kinds?: Record<string, boolean>
+  thresholds?: Partial<DiscordThresholds>
 }
 
 /** A viewer ranked by the time their donations moved. */

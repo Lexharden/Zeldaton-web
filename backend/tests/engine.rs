@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use zeldathon_server::domain::*;
 use zeldathon_server::engine::*;
+use zeldathon_server::notify::{Detail, Notice};
 use zeldathon_server::seed;
 use zeldathon_server::state::RaceState;
 
@@ -898,5 +899,174 @@ fn the_donation_policy_is_edited_with_the_event_and_validated() {
             ..EventPatch::default()
         })
         .is_err()
+    );
+}
+
+// ---- notices for Discord -------------------------------------------------------------------------
+
+fn notices(fx: &Fx) -> Vec<&Notice> {
+    fx.notices.iter().collect()
+}
+
+#[test]
+fn a_boss_makes_one_keyed_notice_with_the_running_count() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let boss = |name: &str| IngestMsg::BossDefeated { boss: name.into() };
+    let (fx, _) = ingest(&mut s, "ralbat", boss("gohma"), t0()).unwrap();
+    let n = notices(&fx);
+    assert_eq!(n.len(), 1);
+    assert_eq!(
+        n[0].detail,
+        Detail::Boss {
+            boss: "gohma".into(),
+            count: Some(1)
+        }
+    );
+    assert_eq!(n[0].dedupe.as_deref(), Some("boss:ralbat:gohma"));
+    assert_eq!(n[0].racer.as_ref().unwrap().name, "Ralbat");
+    let (fx, _) = ingest(&mut s, "ralbat", boss("morpha"), t0()).unwrap();
+    assert_eq!(
+        notices(&fx)[0].detail,
+        Detail::Boss {
+            boss: "morpha".into(),
+            count: Some(2)
+        }
+    );
+}
+
+#[test]
+fn finishing_places_each_racer_and_keys_the_notice_per_racer() {
+    let mut s = state(t0());
+    let all = zeldathon_server::catalog::default_catalog().default_required();
+    let mut places = vec![];
+    for (k, id) in ["pinchiviejo", "xime"].into_iter().enumerate() {
+        start(&mut s, id, t0());
+        let patch = GameProgressPatch {
+            completed_objectives: Some(all.clone()),
+            ..Default::default()
+        };
+        ingest(
+            &mut s,
+            id,
+            IngestMsg::GameProgress { progress: patch },
+            t0(),
+        )
+        .unwrap();
+        let at = t0() + Duration::seconds(60 * (k as i64 + 1));
+        let (fx, _) = ingest(&mut s, id, IngestMsg::GameFinished, at).unwrap();
+        let n = notices(&fx);
+        assert_eq!(n.len(), 1);
+        assert_eq!(
+            n[0].dedupe.as_deref(),
+            Some(format!("finish:{id}").as_str())
+        );
+        if let Detail::Winner {
+            place,
+            final_seconds,
+        } = &n[0].detail
+        {
+            places.push((*place, *final_seconds));
+        }
+    }
+    assert_eq!(places, [(1, Some(60)), (2, Some(120))]);
+}
+
+#[test]
+fn running_out_of_time_notifies_once_per_day_of_that_racer() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let end = t0() + Duration::hours(5); // past the 4 h budget
+    let fx = s.tick(end, 20);
+    let n = notices(&fx);
+    let exhausted: Vec<_> = n.iter().filter(|n| n.detail == Detail::Exhausted).collect();
+    assert_eq!(exhausted.len(), 1);
+    let key = exhausted[0].dedupe.clone().unwrap();
+    assert!(key.starts_with("exhausted:ralbat:"), "{key}");
+}
+
+#[test]
+fn a_big_quick_rise_in_progress_is_reported_as_a_possible_jump() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let pct = |p: f64| IngestMsg::GameProgress {
+        progress: GameProgressPatch {
+            percentage: Some(p),
+            ..Default::default()
+        },
+    };
+    let jumps = |fx: &Fx| -> Vec<(f64, f64, i64)> {
+        fx.notices
+            .iter()
+            .filter_map(|n| match n.detail {
+                Detail::Jump { from, to, seconds } => Some((from, to, seconds)),
+                _ => None,
+            })
+            .collect()
+    };
+    let (fx, _) = ingest(&mut s, "ralbat", pct(10.0), t0()).unwrap();
+    assert!(jumps(&fx).is_empty(), "the first value is only a reference");
+    let (fx, _) = ingest(&mut s, "ralbat", pct(13.0), t0() + Duration::seconds(20)).unwrap();
+    assert!(jumps(&fx).is_empty(), "a normal step");
+    let (fx, _) = ingest(&mut s, "ralbat", pct(60.0), t0() + Duration::seconds(50)).unwrap();
+    assert_eq!(
+        jumps(&fx),
+        [(10.0, 60.0, 50)],
+        "measured from the lowest recent value"
+    );
+}
+
+#[test]
+fn hitting_the_daily_donation_cap_notifies_the_referees_once_per_kind_and_day() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    s.update_event(EventPatch {
+        donation_time: Some(DonationTimePolicy {
+            max_removed_seconds_per_day: 100,
+            ..DonationTimePolicy::default()
+        }),
+        ..Default::default()
+    })
+    .unwrap();
+    let donate = |id: &str, secs: i64| IngestEnvelope {
+        id: Some(id.into()),
+        msg: IngestMsg::TimeDonation {
+            delta_seconds: secs,
+            source: DonationSource {
+                platform: Platform::Twitch,
+                currency: DonationCurrency::Bits,
+                amount: 10,
+                gift: None,
+                gift_count: None,
+                viewer: Some("fan".into()),
+            },
+        },
+    };
+    let (fx, _) = s.apply_ingest("ralbat", donate("d1", -60), t0()).unwrap();
+    assert!(
+        notices(&fx)
+            .iter()
+            .all(|n| !matches!(n.detail, Detail::DonationCap { .. }))
+    );
+    let (fx, _) = s.apply_ingest("ralbat", donate("d2", -60), t0()).unwrap(); // only 40 s left
+    let cap: Vec<_> = notices(&fx)
+        .into_iter()
+        .filter(|n| matches!(n.detail, Detail::DonationCap { .. }))
+        .collect();
+    assert_eq!(cap.len(), 1);
+    assert_eq!(
+        cap[0].detail,
+        Detail::DonationCap {
+            adding: false,
+            limit_seconds: 100,
+            viewer: Some("fan".into())
+        }
+    );
+    assert!(
+        cap[0]
+            .dedupe
+            .as_deref()
+            .unwrap()
+            .starts_with("cap:ralbat:remove:")
     );
 }

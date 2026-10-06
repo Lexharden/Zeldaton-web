@@ -25,11 +25,23 @@ pub struct Config {
     pub uploads_dir: String,
     /// DISCORD_WEBHOOK_URL: where "X is live" announcements go. A secret: never logged or returned.
     pub discord_webhook_url: Option<String>,
+    /// DISCORD_STAFF_WEBHOOK_URL: the referees' private channel (alerts, organizer actions). A secret too.
+    pub discord_staff_webhook_url: Option<String>,
+    /// DISCORD_STAFF_ROLE_ID: role mentioned on critical staff alerts (optional; digits only).
+    pub discord_staff_role_id: Option<String>,
     /// PUBLIC_URL: the site's address (no trailing slash) for links in Discord messages.
     pub public_url: String,
 }
 
 impl Config {
+    /// The webhook of a Discord channel, when it is configured.
+    pub fn webhook_for(&self, channel: crate::notify::Channel) -> Option<String> {
+        match channel {
+            crate::notify::Channel::Public => self.discord_webhook_url.clone(),
+            crate::notify::Channel::Staff => self.discord_staff_webhook_url.clone(),
+        }
+    }
+
     pub fn from_env() -> Self {
         let (admin_token, generated) = match env::var("ADMIN_TOKEN") {
             Ok(t) if t.len() >= 16 => (t, false),
@@ -67,7 +79,15 @@ impl Config {
             discord_webhook_url: env::var("DISCORD_WEBHOOK_URL")
                 .ok()
                 .map(|v| v.trim().to_string())
-                .filter(|v| crate::discord::valid_webhook_url(v)),
+                .filter(|v| crate::notify::client::valid_webhook_url(v)),
+            discord_staff_webhook_url: env::var("DISCORD_STAFF_WEBHOOK_URL")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| crate::notify::client::valid_webhook_url(v)),
+            discord_staff_role_id: env::var("DISCORD_STAFF_ROLE_ID")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| crate::notify::client::valid_role_id(v)),
             public_url: env::var("PUBLIC_URL")
                 .ok()
                 .map(|v| v.trim().trim_end_matches('/').to_string())

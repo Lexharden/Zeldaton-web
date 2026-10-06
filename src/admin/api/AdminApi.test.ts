@@ -190,31 +190,59 @@ describe('AdminApi', () => {
     expect(JSON.parse(String(calls[2].init.body))).toEqual({ enabled: false })
   })
 
-  it('reads the Discord status, switches it and sends the test message', async () => {
-    const { fetcher, calls } = fakeFetch([
-      { body: { user: { id: 1, username: 'ana', role: 'admin' }, csrfToken: 'csrf-4' } },
-      {
-        body: {
+  it('reads the Discord state, patches it and tests each channel', async () => {
+    const state = {
+      rehearsal: false,
+      channels: {
+        public: {
           configured: true,
           enabled: false,
-          rehearsal: false,
           lastSentAt: null,
           lastError: null,
+          dropped: 0,
+          queued: 0,
+        },
+        staff: {
+          configured: false,
+          enabled: false,
+          lastSentAt: null,
+          lastError: null,
+          dropped: 0,
+          queued: 0,
         },
       },
-      { body: { enabled: true } },
+      kinds: [],
+      thresholds: {
+        disconnectMinutes: 3,
+        lowTimeMinutes: 10,
+        jumpPercent: 20,
+        jumpWindowSeconds: 120,
+      },
+    }
+    const { fetcher, calls } = fakeFetch([
+      { body: { user: { id: 1, username: 'ana', role: 'admin' }, csrfToken: 'csrf-4' } },
+      { body: state },
+      { body: state },
       { body: { ok: true } },
     ])
     const api = new AdminApi('/api/admin', fetcher)
     await api.login('ana', 'pw')
-    expect((await api.discord()).configured).toBe(true)
-    await api.setDiscord(true)
-    await api.testDiscord()
+    expect((await api.discord()).channels.public.configured).toBe(true)
+    await api.setDiscord({
+      staffEnabled: true,
+      kinds: { boss: false },
+      thresholds: { lowTimeMinutes: 15 },
+    })
+    await api.testDiscord('staff')
     expect(calls[1].url).toBe('/api/admin/discord')
     expect(calls[2].init.method).toBe('PUT')
-    expect(JSON.parse(String(calls[2].init.body))).toEqual({ enabled: true })
+    expect(JSON.parse(String(calls[2].init.body))).toEqual({
+      staffEnabled: true,
+      kinds: { boss: false },
+      thresholds: { lowTimeMinutes: 15 },
+    })
     expect(calls[3].url).toBe('/api/admin/discord/test')
-    expect(calls[3].init.method).toBe('POST')
+    expect(JSON.parse(String(calls[3].init.body))).toEqual({ channel: 'staff' })
     expect(headersOf(calls[3].init)['X-CSRF-Token']).toBe('csrf-4')
   })
 })

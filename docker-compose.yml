@@ -19,6 +19,8 @@ services:
       # (a secret: keep it in .env). Empty webhook = no announcements.
       PUBLIC_URL: https://${SITE_ADDRESS}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DISCORD_STAFF_WEBHOOK_URL: ${DISCORD_STAFF_WEBHOOK_URL:-}
+      DISCORD_STAFF_ROLE_ID: ${DISCORD_STAFF_ROLE_ID:-}
       STALE_HEARTBEAT_SECS: ${STALE_HEARTBEAT_SECS:-20}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:

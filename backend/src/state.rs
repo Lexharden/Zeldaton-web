@@ -45,6 +45,8 @@ pub struct RacerRuntime {
     /// Every donation id ever applied (from the ledger): a retry is never applied twice, even
     /// after a server restart, which the short `seen_ids` window cannot guarantee.
     pub donation_ids: HashSet<String>,
+    /// Reference point to spot a sudden jump in progress: (when, percentage).
+    pub progress_mark: Option<(DateTime<Utc>, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

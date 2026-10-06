@@ -248,6 +248,10 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             sqlx::query("DELETE FROM time_donations")
                 .execute(&mut *tx)
                 .await?;
+            // A reset race starts with a clean slate of "already announced" notices.
+            sqlx::query("DELETE FROM notices_sent")
+                .execute(&mut *tx)
+                .await?;
             tx.commit().await?;
         }
         PersistOp::Counters(c) => {
@@ -542,6 +546,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
             donation_added_ms: r.get("donation_added_ms"),
             donation_removed_ms: r.get("donation_removed_ms"),
             donation_ids: donation_ids.remove(&id).unwrap_or_default(),
+            progress_mark: None,
         });
     }
 
@@ -784,4 +789,19 @@ pub async fn set_donor_hidden(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Reserves a one-off notice key. `true` the first time (the notice may be sent), `false` when it
+/// was already sent, even before a restart.
+pub async fn notice_reserve(
+    pool: &SqlitePool,
+    key: &str,
+    at: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let done = sqlx::query("INSERT OR IGNORE INTO notices_sent (key, sent_at) VALUES (?, ?)")
+        .bind(key)
+        .bind(rfc(at))
+        .execute(pool)
+        .await?;
+    Ok(done.rows_affected() == 1)
 }

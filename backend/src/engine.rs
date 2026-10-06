@@ -12,11 +12,17 @@ use crate::catalog::{CatalogItem, CatalogObjective};
 use crate::clock::{Checkpoint, format_hms, next_reset_utc, parse_local_time};
 use crate::db::{IdentityRow, PersistOp, RacerStateRow, TimeDonationRow};
 use crate::domain::*;
+use crate::notify::{Detail, LiveInfo, Notice};
 use crate::state::*;
 
 pub fn iso(d: DateTime<Utc>) -> String {
     d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
+
+/// Smallest rise in progress (percentage points) the engine reports as a possible jump...
+const JUMP_REPORT_MIN: f64 = 5.0;
+/// ...and the longest span it looks at. The dispatcher applies the organizer's own thresholds.
+const JUMP_REPORT_MAX_SECS: i64 = 3600;
 
 /// Side effects produced by a transition.
 #[derive(Default, Debug)]
@@ -24,6 +30,8 @@ pub struct Fx {
     pub msgs: Vec<WsMessage>,
     pub ops: Vec<PersistOp>,
     pub down: Vec<(String, IngestDown)>,
+    /// Worth telling Discord (never public by themselves; the dispatcher decides who hears what).
+    pub notices: Vec<Notice>,
     touched: Vec<usize>,
     stats_dirty: bool,
 }
@@ -575,6 +583,28 @@ impl RaceState {
                 }
                 let patch = self.sanitize_progress(progress)?;
                 let before_area = self.racers[i].racer.current_area.clone();
+                // A big rise in a short time is worth a referee's look: report the facts and let the
+                // dispatcher apply the organizer's thresholds.
+                if let Some(to) = patch.percentage {
+                    if let Some((at, from)) = self.racers[i].progress_mark
+                        && to - from >= JUMP_REPORT_MIN
+                    {
+                        let seconds = (now - at).num_seconds().max(0);
+                        if seconds <= JUMP_REPORT_MAX_SECS {
+                            fx.notices.push(Notice::new(
+                                Some(LiveInfo::from_state(self, i)),
+                                Detail::Jump { from, to, seconds },
+                                now,
+                            ));
+                        }
+                    }
+                    // The reference point moves when progress changes; a rise is measured from the
+                    // lowest recent value so a slow climb cannot hide a jump.
+                    let keep = self.racers[i].progress_mark.filter(|(at, from)| {
+                        to >= *from && (now - *at).num_seconds() <= JUMP_REPORT_MAX_SECS
+                    });
+                    self.racers[i].progress_mark = keep.or(Some((now, to)));
+                }
                 let r = &mut self.racers[i].racer;
                 if let Some(p) = patch.percentage {
                     r.progress_percentage = p;
@@ -699,6 +729,18 @@ impl RaceState {
                     boss: boss.clone(),
                     bosses_defeated: Some(count),
                 });
+                // HiveShock may report the same boss twice: the key makes the notice fire once.
+                fx.notices.push(
+                    Notice::new(
+                        Some(LiveInfo::from_state(self, i)),
+                        Detail::Boss {
+                            boss: boss.clone(),
+                            count: Some(count),
+                        },
+                        now,
+                    )
+                    .keyed(format!("boss:{racer_id}:{boss}")),
+                );
                 self.note(
                     &mut fx,
                     now,
@@ -883,6 +925,28 @@ impl RaceState {
                 limited_by: limited_by.map(str::to_string),
             })));
 
+        if limited_by == Some("daily_limit") {
+            let (kind, limit) = if adding {
+                ("add", policy.max_added_seconds_per_day)
+            } else {
+                ("remove", policy.max_removed_seconds_per_day)
+            };
+            let id = self.racers[i].racer.id.clone();
+            let day = iso(self.racers[i].reset_at);
+            fx.notices.push(
+                Notice::new(
+                    Some(LiveInfo::from_state(self, i)),
+                    Detail::DonationCap {
+                        adding,
+                        limit_seconds: limit,
+                        viewer: source.viewer.clone(),
+                    },
+                    now,
+                )
+                .keyed(format!("cap:{id}:{kind}:{day}")),
+            );
+        }
+
         let status = self.racers[i].racer.status;
         if after == 0 && matches!(status, RacerStatus::Live | RacerStatus::Paused) {
             // Donations took the last second: same as running out of time.
@@ -997,6 +1061,23 @@ impl RaceState {
                 finished_at_utc: finished_at,
             });
         }
+        let place = self
+            .racers
+            .iter()
+            .filter(|r| r.racer.status == RacerStatus::Finished)
+            .count() as u32;
+        let finished_id = self.racers[i].racer.id.clone();
+        fx.notices.push(
+            Notice::new(
+                Some(LiveInfo::from_state(self, i)),
+                Detail::Winner {
+                    place,
+                    final_seconds: Some(final_time),
+                },
+                now,
+            )
+            .keyed(format!("finish:{finished_id}")),
+        );
         let name = self.racers[i].racer.display_name.clone();
         self.note(
             fx,
@@ -1099,7 +1180,13 @@ impl RaceState {
             racer_id: id.clone(),
         });
         self.set_status(i, RacerStatus::Exhausted, now, fx);
-        fx.down.push((id, IngestDown::ForceClose));
+        fx.down.push((id.clone(), IngestDown::ForceClose));
+        // Once per day of this racer (their reset time identifies the day).
+        let day = iso(self.racers[i].reset_at);
+        fx.notices.push(
+            Notice::new(Some(LiveInfo::from_state(self, i)), Detail::Exhausted, now)
+                .keyed(format!("exhausted:{id}:{day}")),
+        );
         self.note(
             fx,
             now,
@@ -1476,6 +1563,7 @@ impl RaceState {
             r.donation_added_ms = 0;
             r.donation_removed_ms = 0;
             r.donation_ids.clear();
+            r.progress_mark = None;
             r.racer.progress_percentage = 0.0;
             r.racer.current_area = None;
             r.racer.current_objective = None;
@@ -1552,6 +1640,7 @@ impl RaceState {
             donation_added_ms: 0,
             donation_removed_ms: 0,
             donation_ids: HashSet::new(),
+            progress_mark: None,
         });
         let i = self.racers.len() - 1;
         let mut fx = Fx::default();

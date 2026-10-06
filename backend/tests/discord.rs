@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{Json, Router};
 use serde_json::{Value, json};
-use zeldathon_server::discord::DiscordClient;
+use zeldathon_server::notify::client::DiscordClient;
 
 #[derive(Clone, Default)]
 struct Hook {

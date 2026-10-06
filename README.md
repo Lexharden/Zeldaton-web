@@ -118,18 +118,29 @@ until they accept (Consent Mode v2, script injected only after consent), rejecti
 Global Privacy Control counts as a rejection, and `/admin` is never tracked. Page views are sent on every SPA
 navigation. The policy lives at `/privacy` (and terms at `/terms`); "Cookie settings" in the footer reopens the notice.
 
-### Discord announcements
+### Discord notifications
 
-When a racer goes live (the same "LIVE" the site shows: HiveShock reports a broadcast, or a game session is running),
-the bot-less webhook posts one embed to your channel: who is live, their progress, a link to their page on the site and to
-their TikTok / Twitch / YouTube. Set it up once:
+Two channels, each with its own webhook (no bot needed). Switch each one on, and choose which notices it gets, in
+`/admin → Evento → Discord`; the same card has a test button per channel.
 
-1. Discord: channel settings → Integrations → Webhooks → New webhook → Copy URL.
-2. Put it in the server's `.env` as `DISCORD_WEBHOOK_URL=...` (a secret; links use `https://SITE_ADDRESS`) and rebuild.
-3. `/admin → Evento → Discord`: send the test message, then switch announcements on.
+| Channel | Notices |
+| --- | --- |
+| **Community** (`DISCORD_WEBHOOK_URL`) | 🔴 a racer goes live (with links to their page and TikTok / Twitch) · 🏆 someone finishes (the first is the winner) · ⏱️ a racer runs out of time · 👹 a boss is defeated · 🥇 a new leader |
+| **Referees** (`DISCORD_STAFF_WEBHOOK_URL`) | 🔌 a long disconnection (and the return) · ⚠️ low time · 🚧 a donation cap is reached · 🚩 suspicious progress jump · 🔔 event started / paused / resumed / finished / reset · 🛠️ an organizer closed a game, adjusted time (who and why), reset a day or finished a racer |
 
-Rules: a racer must stay live 30 s before it is announced and is not announced again for 30 min; nothing is sent in rehearsal
-mode or while the event is not live; nobody is pinged. The URL is never shown in the panel or logs.
+Setup: Discord → channel settings → Integrations → Webhooks → New webhook → Copy URL → put it in the server's `.env`
+(secrets: never share them) and rebuild. Optional `DISCORD_STAFF_ROLE_ID` makes critical referee alerts (disconnection, low time,
+suspicious jump) mention that role; nothing else mentions anybody. Thresholds (minutes disconnected, minutes left, size and
+speed of a "jump") are set in the same card.
+
+How it behaves: the community channel only hears a **running, real** event (never rehearsal or before the start); the referees'
+channel also works in rehearsal (tagged `[ENSAYO]`) so you can test it. One-off notices (boss, finish, ran out of time,
+donation cap) are sent once even if the server restarts, and are forgotten when you reset the event. Repeats are damped
+(live: 30 s steady and 30 min apart; leader: 1 min steady and 5 min apart). Each channel posts in order under Discord's rate
+limit, most important first; the webhook URLs never appear in the panel or the logs.
+
+Adding a new notice later: one variant in `backend/src/notify/mod.rs` (`Kind` and `Detail`), the place that emits it and one arm in
+`notify/render.rs`; the panel lists kinds from the API.
 
 ### Rehearsal, then the real event
 

@@ -2,13 +2,14 @@
 //! WebSocket clients, and the persistence queue. Every mutation runs under one lock and its
 //! effects are published before the lock is released, so clients see changes in state order.
 
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, RwLock};
 
 use chrono::{DateTime, Utc};
 use tokio::sync::broadcast;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::auth::{LoginLimiter, constant_eq, hash_token};
 use crate::config::Config;
@@ -17,6 +18,8 @@ use crate::domain::*;
 use crate::engine::{
     AdminAction, EventPatch, Fx, IngestEnvelope, IngestError, NewRacer, RacerPatch, Reply, iso,
 };
+use crate::notify::settings::NotifySettings;
+use crate::notify::{Channel, ChannelStatus, LiveInfo, Notice};
 use crate::state::{IngestDown, IngestHandle, RaceState};
 
 pub struct Hub {
@@ -29,8 +32,14 @@ pub struct Hub {
     /// Failed-login throttles: per username and per client address.
     pub user_limiter: LoginLimiter,
     pub ip_limiter: LoginLimiter,
-    /// Outcome of the last Discord post (shown in the panel).
-    pub discord: Mutex<crate::discord::DiscordStatus>,
+    /// Where the race engine and the organizer actions drop what is worth telling Discord about.
+    /// The dispatcher takes the receiving end once (`take_notice_receiver`).
+    notices_tx: UnboundedSender<Notice>,
+    notices_rx: Mutex<Option<UnboundedReceiver<Notice>>>,
+    /// The organizer's Discord settings, cached (the dispatcher reads them for every notice).
+    notify: RwLock<NotifySettings>,
+    /// Outcome of the latest posts per Discord channel (shown in the panel).
+    notify_status: Mutex<HashMap<Channel, ChannelStatus>>,
 }
 
 pub type AppState = Arc<Hub>;
@@ -43,6 +52,7 @@ impl Hub {
         pool: sqlx::SqlitePool,
     ) -> Arc<Self> {
         let (tx, _) = broadcast::channel(512);
+        let (notices_tx, notices_rx) = unbounded_channel();
         Arc::new(Self {
             state: Mutex::new(state),
             tx,
@@ -52,7 +62,10 @@ impl Hub {
             conns: AtomicU64::new(1),
             user_limiter: LoginLimiter::new(5, std::time::Duration::from_secs(15 * 60)),
             ip_limiter: LoginLimiter::new(30, std::time::Duration::from_secs(15 * 60)),
-            discord: Mutex::new(crate::discord::DiscordStatus::default()),
+            notices_tx,
+            notices_rx: Mutex::new(Some(notices_rx)),
+            notify: RwLock::new(NotifySettings::default()),
+            notify_status: Mutex::new(HashMap::new()),
         })
     }
 
@@ -95,6 +108,9 @@ impl Hub {
         }
         for op in fx.ops {
             let _ = self.persist.send(op);
+        }
+        for notice in fx.notices {
+            let _ = self.notices_tx.send(notice);
         }
         for (racer_id, down) in fx.down {
             if let Some(i) = state.idx(&racer_id)
@@ -286,13 +302,72 @@ impl Hub {
         racer_id: Option<&str>,
         payload: serde_json::Value,
     ) {
+        let now = Utc::now();
+        // Referees hear about what organizers do (who, what and why).
+        let racer =
+            racer_id.and_then(|id| self.read(|s| s.idx(id).map(|i| LiveInfo::from_state(s, i))));
+        if let Some(notice) = crate::notify::from_audit(actor, action, racer, &payload, now) {
+            let _ = self.notices_tx.send(notice);
+        }
         let _ = self.persist.send(PersistOp::Audit(AuditRow {
-            ts: Utc::now(),
+            ts: now,
             actor: actor.into(),
             action: action.into(),
             racer_id: racer_id.map(str::to_string),
             payload,
         }));
+    }
+
+    // ---- Discord notifications ------------------------------------------------------------------
+
+    /// The dispatcher takes the notices' receiving end once; later calls get `None`.
+    pub fn take_notice_receiver(&self) -> Option<UnboundedReceiver<Notice>> {
+        self.notices_rx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+    }
+
+    pub fn notify_settings(&self) -> NotifySettings {
+        self.notify
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    pub fn set_notify_settings(&self, settings: NotifySettings) {
+        *self.notify.write().unwrap_or_else(|e| e.into_inner()) = settings;
+    }
+
+    /// Loads the saved settings (call once at start-up).
+    pub async fn load_notify_settings(&self) {
+        let settings = crate::notify::settings::load(&self.pool).await;
+        self.set_notify_settings(settings);
+    }
+
+    pub fn channel_status(&self, channel: Channel) -> ChannelStatus {
+        self.notify_status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&channel)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn update_channel(&self, channel: Channel, f: impl FnOnce(&mut ChannelStatus)) {
+        let mut all = self.notify_status.lock().unwrap_or_else(|e| e.into_inner());
+        f(all.entry(channel).or_default());
+    }
+
+    /// Remembers how the latest post to a channel went.
+    pub fn record_send(&self, channel: Channel, result: &Result<(), String>) {
+        self.update_channel(channel, |s| match result {
+            Ok(()) => {
+                s.last_sent_at = Some(Utc::now());
+                s.last_error = None;
+            }
+            Err(e) => s.last_error = Some(e.clone()),
+        });
     }
 
     pub fn admin_action(
