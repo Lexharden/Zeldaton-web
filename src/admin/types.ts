@@ -125,6 +125,18 @@ export interface DonationTotals {
   removedSeconds: number
 }
 
+/** State of the Discord "X is live" announcements. The webhook URL is never sent to the browser. */
+export interface DiscordStatus {
+  /** DISCORD_WEBHOOK_URL is set on the server. */
+  configured: boolean
+  /** The organizer's switch. */
+  enabled: boolean
+  /** Rehearsal mode: nothing is announced while it is on. */
+  rehearsal: boolean
+  lastSentAt: string | null
+  lastError: string | null
+}
+
 /** A viewer ranked by the time their donations moved. */
 export interface TopDonor {
   viewer: string

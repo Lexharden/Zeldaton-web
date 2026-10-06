@@ -80,6 +80,8 @@ pub fn router(hub: AppState) -> Router<AppState> {
         )
         .route("/audit", get(audit))
         .route("/donations", get(donations))
+        .route("/discord", get(discord_status).put(set_discord))
+        .route("/discord/test", post(discord_test))
         .route("/donors/visibility", put(set_donors_visibility))
         .route("/donors/hidden", put(set_donor_hidden))
         .layer(middleware::from_fn_with_state(hub, authenticate));
@@ -1040,5 +1042,63 @@ async fn set_donor_hidden(
         None,
         json!({ "platform": body.platform, "viewer": body.viewer, "hidden": body.hidden }),
     );
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ---- Discord announcements ----------------------------------------------------------------------
+
+/// State of the Discord integration. The webhook URL itself is never returned.
+async fn discord_status(State(hub): State<AppState>) -> Json<Value> {
+    let enabled = matches!(
+        db::setting(&hub.pool, crate::discord::ENABLED_KEY).await,
+        Ok(Some(v)) if v == "true"
+    );
+    let status = hub
+        .discord
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    Json(json!({
+        "configured": hub.cfg.discord_webhook_url.is_some(),
+        "enabled": enabled,
+        "rehearsal": hub.read(|s| s.event.rehearsal),
+        "lastSentAt": status.last_sent_at.map(iso),
+        "lastError": status.last_error,
+    }))
+}
+
+/// Turns the "X is live" announcements on or off.
+async fn set_discord(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+    Json(body): Json<VisibilityBody>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    db::set_setting(
+        &hub.pool,
+        crate::discord::ENABLED_KEY,
+        if body.enabled { "true" } else { "false" },
+    )
+    .await
+    .map_err(ApiError::internal)?;
+    hub.audit_as(
+        &p.actor,
+        "discord.toggle",
+        None,
+        json!({ "enabled": body.enabled }),
+    );
+    Ok(Json(json!({ "enabled": body.enabled })))
+}
+
+/// Sends a sample message to the channel, to check the webhook before the event.
+async fn discord_test(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    crate::discord::send_test(&hub)
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Discord: {e}")))?;
+    hub.audit_as(&p.actor, "discord.test", None, json!({}));
     Ok(Json(json!({ "ok": true })))
 }

@@ -35,6 +35,10 @@ impl Harness {
 }
 
 async fn harness() -> Harness {
+    harness_with(None).await
+}
+
+async fn harness_with(discord_webhook_url: Option<String>) -> Harness {
     let pool = db::connect("sqlite::memory:").await.unwrap();
     db::migrate(&pool).await.unwrap();
     let seeded = seed::build(Utc::now());
@@ -55,6 +59,8 @@ async fn harness() -> Harness {
         admin_user: "admin".into(),
         admin_password: None,
         cookie_secure: Some(false),
+        discord_webhook_url,
+        public_url: "https://zeldaton.example".into(),
         uploads_dir: std::env::temp_dir()
             .join(format!("zeldathon-test-{}", std::process::id()))
             .to_string_lossy()
@@ -1756,4 +1762,146 @@ async fn the_public_donors_board_shows_only_what_is_meant_and_the_organizer_cont
     tokio::time::sleep(Duration::from_millis(300)).await;
     let (_, board) = call(&h, "GET", "/api/donors", None, None).await;
     assert!(board["donors"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_discord_switch_is_an_organizer_setting_and_never_leaks_the_webhook() {
+    let h = harness().await; // no DISCORD_WEBHOOK_URL in the test config
+    let (s, _) = call(&h, "GET", "/api/admin/discord", None, None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let (s, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        (st["configured"].clone(), st["enabled"].clone()),
+        (json!(false), json!(false))
+    );
+    assert!(st["lastSentAt"].is_null() && st["lastError"].is_null());
+    assert!(!st.to_string().contains("webhooks"));
+
+    let (s, st) = call(
+        &h,
+        "PUT",
+        "/api/admin/discord",
+        Some(ADMIN),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    assert_eq!((s, st["enabled"].clone()), (StatusCode::OK, json!(true)));
+    let (_, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
+    assert_eq!(st["enabled"], true);
+
+    // Without a configured webhook the test message explains what is missing.
+    let (s, err) = call(&h, "POST", "/api/admin/discord/test", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    assert!(err.to_string().contains("DISCORD_WEBHOOK_URL"), "{err}");
+
+    let (_, audit) = call(&h, "GET", "/api/admin/audit", Some(ADMIN), None).await;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["action"] == "discord.toggle")
+    );
+}
+
+#[tokio::test]
+async fn a_racer_going_live_is_announced_once_on_discord_with_their_links() {
+    use std::sync::{Arc, Mutex};
+    // A stand-in for the Discord webhook that keeps what it receives.
+    let seen: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let sink = seen.clone();
+    let app = axum::Router::new().route(
+        "/hook",
+        axum::routing::post(move |axum::Json(body): axum::Json<Value>| {
+            let sink = sink.clone();
+            async move {
+                sink.lock().unwrap().push(body);
+                StatusCode::NO_CONTENT
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let hook = format!("http://{}/hook", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let h = harness_with(Some(hook)).await;
+    zeldathon_server::discord::spawn_with(
+        h.hub.clone(),
+        Duration::from_millis(40),
+        zeldathon_server::discord::Announcer::with_timing(
+            Duration::from_millis(150),
+            Duration::from_secs(60),
+        ),
+    );
+    call(&h, "PATCH", "/api/admin/racers/cuaco", Some(ADMIN),
+        Some(json!({ "channels": [{ "platform": "twitch", "handle": "cuaco" }, { "platform": "tiktok", "handle": "cuaco" }] }))).await;
+
+    let go_live = |h: &Harness| {
+        let token = h.token("cuaco");
+        let addr = h.addr;
+        async move {
+            let mut req = format!("ws://{addr}/ingest").into_client_request().unwrap();
+            req.headers_mut()
+                .insert("authorization", format!("Bearer {token}").parse().unwrap());
+            let (mut ws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
+            send(&mut ws, json!({ "type": "HELLO" })).await;
+            send(
+                &mut ws,
+                json!({ "type": "STREAM_STATE", "live": true, "viewers": 50 }),
+            )
+            .await;
+            ws
+        }
+    };
+
+    // Switched off (the default) and event not running: nobody is announced.
+    let ws = go_live(&h).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(seen.lock().unwrap().is_empty());
+    drop(ws);
+
+    // Switched on and the event running: one announcement with the racer's links.
+    call(
+        &h,
+        "PUT",
+        "/api/admin/discord",
+        Some(ADMIN),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    make_event_live(&h).await;
+    let ws = go_live(&h).await;
+    for _ in 0..50 {
+        if !seen.lock().unwrap().is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    {
+        let msgs = seen.lock().unwrap();
+        assert_eq!(msgs.len(), 1, "{msgs:?}");
+        let embed = &msgs[0]["embeds"][0];
+        assert!(embed["title"].as_str().unwrap().contains("Cuaco"));
+        let links = embed["fields"][0]["value"].as_str().unwrap();
+        assert!(
+            links.contains("https://zeldaton.example/racer/cuaco"),
+            "{links}"
+        );
+        assert!(
+            links.contains("(https://twitch.tv/cuaco)")
+                && links.contains("(https://tiktok.com/@cuaco)")
+        );
+        assert_eq!(msgs[0]["allowed_mentions"], json!({ "parse": [] }));
+    }
+    let (_, st) = call(&h, "GET", "/api/admin/discord", Some(ADMIN), None).await;
+    assert!(st["lastSentAt"].is_string() && st["lastError"].is_null());
+
+    // Dropping and coming back inside the cooldown does not announce again.
+    drop(ws);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let _ws = go_live(&h).await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(seen.lock().unwrap().len(), 1);
 }

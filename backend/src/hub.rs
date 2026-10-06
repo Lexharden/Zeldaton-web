@@ -29,6 +29,8 @@ pub struct Hub {
     /// Failed-login throttles: per username and per client address.
     pub user_limiter: LoginLimiter,
     pub ip_limiter: LoginLimiter,
+    /// Outcome of the last Discord post (shown in the panel).
+    pub discord: Mutex<crate::discord::DiscordStatus>,
 }
 
 pub type AppState = Arc<Hub>;
@@ -50,6 +52,7 @@ impl Hub {
             conns: AtomicU64::new(1),
             user_limiter: LoginLimiter::new(5, std::time::Duration::from_secs(15 * 60)),
             ip_limiter: LoginLimiter::new(30, std::time::Duration::from_secs(15 * 60)),
+            discord: Mutex::new(crate::discord::DiscordStatus::default()),
         })
     }
 

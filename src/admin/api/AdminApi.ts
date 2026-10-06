@@ -5,6 +5,7 @@ import type { Racer } from '@/types/racer'
 import type {
   AdminCatalog,
   AuditRow,
+  DiscordStatus,
   DonationsResponse,
   EventAction,
   EventPatchInput,
@@ -154,6 +155,12 @@ export class AdminApi {
   /** Wipes the test run and puts the event back to "upcoming". `confirm` must be REINICIAR. */
   resetEvent = (body: { confirm: string; startAtUtc?: string; leaveRehearsal: boolean }) =>
     this.request<EventInfo>('POST', '/event/reset', body)
+
+  // ---- Discord announcements
+  discord = () => this.request<DiscordStatus>('GET', '/discord')
+  setDiscord = (enabled: boolean) =>
+    this.request<{ enabled: boolean }>('PUT', '/discord', { enabled })
+  testDiscord = () => this.request<{ ok: true }>('POST', '/discord/test', {})
 
   // ---- public donors board
   setDonorsVisible = (enabled: boolean) =>

@@ -189,4 +189,32 @@ describe('AdminApi', () => {
     expect(calls[2].url).toBe('/api/admin/donors/visibility')
     expect(JSON.parse(String(calls[2].init.body))).toEqual({ enabled: false })
   })
+
+  it('reads the Discord status, switches it and sends the test message', async () => {
+    const { fetcher, calls } = fakeFetch([
+      { body: { user: { id: 1, username: 'ana', role: 'admin' }, csrfToken: 'csrf-4' } },
+      {
+        body: {
+          configured: true,
+          enabled: false,
+          rehearsal: false,
+          lastSentAt: null,
+          lastError: null,
+        },
+      },
+      { body: { enabled: true } },
+      { body: { ok: true } },
+    ])
+    const api = new AdminApi('/api/admin', fetcher)
+    await api.login('ana', 'pw')
+    expect((await api.discord()).configured).toBe(true)
+    await api.setDiscord(true)
+    await api.testDiscord()
+    expect(calls[1].url).toBe('/api/admin/discord')
+    expect(calls[2].init.method).toBe('PUT')
+    expect(JSON.parse(String(calls[2].init.body))).toEqual({ enabled: true })
+    expect(calls[3].url).toBe('/api/admin/discord/test')
+    expect(calls[3].init.method).toBe('POST')
+    expect(headersOf(calls[3].init)['X-CSRF-Token']).toBe('csrf-4')
+  })
 })

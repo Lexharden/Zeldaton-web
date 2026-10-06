@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod clock;
 pub mod config;
 pub mod db;
+pub mod discord;
 pub mod domain;
 pub mod engine;
 pub mod error;

@@ -23,6 +23,10 @@ pub struct Config {
     /// UPLOADS_DIR: where racer photos uploaded from the panel are kept (`<dir>/racers`). In Docker
     /// this lives on the data volume.
     pub uploads_dir: String,
+    /// DISCORD_WEBHOOK_URL: where "X is live" announcements go. A secret: never logged or returned.
+    pub discord_webhook_url: Option<String>,
+    /// PUBLIC_URL: the site's address (no trailing slash) for links in Discord messages.
+    pub public_url: String,
 }
 
 impl Config {
@@ -60,6 +64,15 @@ impl Config {
                     "false" | "0" => Some(false),
                     _ => None,
                 }),
+            discord_webhook_url: env::var("DISCORD_WEBHOOK_URL")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| crate::discord::valid_webhook_url(v)),
+            public_url: env::var("PUBLIC_URL")
+                .ok()
+                .map(|v| v.trim().trim_end_matches('/').to_string())
+                .filter(|v| v.starts_with("https://") || v.starts_with("http://"))
+                .unwrap_or_default(),
             uploads_dir: env::var("UPLOADS_DIR")
                 .ok()
                 .filter(|v| !v.trim().is_empty())

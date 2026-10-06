@@ -8,6 +8,7 @@ import type { DonationTimePolicy, EventInfo } from '@/types/event'
 import { adminApi } from '../api/AdminApi'
 import { isoToLocalInput, localInputToIso, shortDuration } from '../format'
 import { messageOf, useToasts } from '../composables/useToasts'
+import DiscordCard from '../components/DiscordCard.vue'
 import EventControls from '../components/EventControls.vue'
 import ResetEventDialog from '../components/ResetEventDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -359,6 +360,8 @@ async function save() {
           </div>
         </div>
       </section>
+
+      <DiscordCard />
 
       <div class="flex justify-end gap-3 xl:col-span-2">
         <button type="button" class="a-btn" @click="load">Descartar cambios</button>

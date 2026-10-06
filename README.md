@@ -73,7 +73,7 @@ ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed O
 | Event | Start/end, daily time, reset hour, win condition, objectives required to finish, **limits for time from donations** |
 | Racers | Create/edit, **upload their photo** (shrunk in the browser; replaces the previous one), channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
 | Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. An item's **icon is just a file name** (`Hookshot-Art.png`) of a picture in `public/art/items`; the site loads it from that folder (a new picture needs a rebuild). The site and HiveShock update on their own |
-| Donations | Time that TikTok gifts / Twitch bits added or removed, per racer (today and whole event), the **top donors** (who moved the clock most) and one by one |
+| Donations | Time that TikTok gifts / Twitch bits added or removed, per racer (today and whole event), the **top donors** (who moved the clock most; shown publicly on the home page, you can hide one or switch the board off) and one by one |
 | Audit | Who did what and when |
 | Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |
 
@@ -117,6 +117,19 @@ With one, visitors get a cookie notice with equal **Accept / Reject** buttons: n
 until they accept (Consent Mode v2, script injected only after consent), rejecting later deletes the `_ga` cookies,
 Global Privacy Control counts as a rejection, and `/admin` is never tracked. Page views are sent on every SPA
 navigation. The policy lives at `/privacy` (and terms at `/terms`); "Cookie settings" in the footer reopens the notice.
+
+### Discord announcements
+
+When a racer goes live (the same "LIVE" the site shows: HiveShock reports a broadcast, or a game session is running),
+the bot-less webhook posts one embed to your channel: who is live, their progress, a link to their page on the site and to
+their TikTok / Twitch / YouTube. Set it up once:
+
+1. Discord: channel settings → Integrations → Webhooks → New webhook → Copy URL.
+2. Put it in the server's `.env` as `DISCORD_WEBHOOK_URL=...` (a secret; links use `https://SITE_ADDRESS`) and rebuild.
+3. `/admin → Evento → Discord`: send the test message, then switch announcements on.
+
+Rules: a racer must stay live 30 s before it is announced and is not announced again for 30 min; nothing is sent in rehearsal
+mode or while the event is not live; nobody is pinged. The URL is never shown in the panel or logs.
 
 ### Rehearsal, then the real event
 

@@ -15,6 +15,10 @@ services:
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       CORS_ORIGINS: https://${SITE_ADDRESS:?set SITE_ADDRESS (e.g. zeldathon.example.com)}
+      # Site address for links inside Discord messages, and the webhook of the announcements channel
+      # (a secret: keep it in .env). Empty webhook = no announcements.
+      PUBLIC_URL: https://${SITE_ADDRESS}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       STALE_HEARTBEAT_SECS: ${STALE_HEARTBEAT_SECS:-20}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:

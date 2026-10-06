@@ -106,6 +106,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    if std::env::var("DISCORD_WEBHOOK_URL").is_ok_and(|v| !v.trim().is_empty())
+        && cfg.discord_webhook_url.is_none()
+    {
+        tracing::warn!("DISCORD_WEBHOOK_URL is not a Discord webhook URL: announcements are off");
+    }
+    zeldathon_server::discord::spawn(hub.clone());
+
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("listening on http://{}", cfg.bind);
     axum::serve(listener, app::build(hub))
