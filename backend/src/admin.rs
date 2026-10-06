@@ -80,6 +80,8 @@ pub fn router(hub: AppState) -> Router<AppState> {
         )
         .route("/audit", get(audit))
         .route("/donations", get(donations))
+        .route("/donors/visibility", put(set_donors_visibility))
+        .route("/donors/hidden", put(set_donor_hidden))
         .layer(middleware::from_fn_with_state(hub, authenticate));
     Router::new()
         .route("/auth/login", post(login))
@@ -948,9 +950,10 @@ async fn donations(
     let totals = db::donation_totals(&hub.pool)
         .await
         .map_err(ApiError::internal)?;
-    let donors = db::top_donors(&hub.pool, 10)
+    let donors = db::top_donors(&hub.pool, 20, true)
         .await
         .map_err(ApiError::internal)?;
+    let donors_public = donors_public(&hub.pool).await;
     let (policy, today) = hub.read(|s| {
         let today: Vec<Value> = s
             .racers
@@ -966,6 +969,76 @@ async fn donations(
         (s.event.donation_time.clone(), today)
     });
     Ok(Json(
-        json!({ "policy": policy, "today": today, "totals": totals, "donors": donors, "recent": recent }),
+        json!({ "policy": policy, "today": today, "totals": totals, "donors": donors,
+                "donorsPublic": donors_public, "recent": recent }),
     ))
+}
+
+/// Whether the public site shows the donors board (on unless the organizer turned it off).
+pub async fn donors_public(pool: &sqlx::SqlitePool) -> bool {
+    !matches!(
+        db::setting(pool, "donors_public").await,
+        Ok(Some(v)) if v == "false"
+    )
+}
+
+#[derive(Deserialize)]
+struct VisibilityBody {
+    enabled: bool,
+}
+
+/// Turns the public donors board on or off.
+async fn set_donors_visibility(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+    Json(body): Json<VisibilityBody>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    db::set_setting(
+        &hub.pool,
+        "donors_public",
+        if body.enabled { "true" } else { "false" },
+    )
+    .await
+    .map_err(ApiError::internal)?;
+    hub.audit_as(
+        &p.actor,
+        "donors.visibility",
+        None,
+        json!({ "enabled": body.enabled }),
+    );
+    Ok(Json(json!({ "donorsPublic": body.enabled })))
+}
+
+#[derive(Deserialize)]
+struct HiddenBody {
+    platform: String,
+    viewer: String,
+    hidden: bool,
+}
+
+/// Hides or shows one donor on the public board (they keep counting in the ledger and the panel).
+async fn set_donor_hidden(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+    Json(body): Json<HiddenBody>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    if !matches!(body.platform.as_str(), "tiktok" | "twitch" | "youtube")
+        || body.viewer.trim().is_empty()
+    {
+        return Err(ApiError::BadRequest(
+            "platform (tiktok, twitch, youtube) and viewer are required".into(),
+        ));
+    }
+    db::set_donor_hidden(&hub.pool, &body.platform, &body.viewer, body.hidden)
+        .await
+        .map_err(ApiError::internal)?;
+    hub.audit_as(
+        &p.actor,
+        "donors.hide",
+        None,
+        json!({ "platform": body.platform, "viewer": body.viewer, "hidden": body.hidden }),
+    );
+    Ok(Json(json!({ "ok": true })))
 }

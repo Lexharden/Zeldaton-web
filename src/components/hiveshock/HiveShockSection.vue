@@ -18,7 +18,7 @@ import PoweredBy from './PoweredBy.vue'
       <div class="grid items-end gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <header v-reveal>
           <p class="hud-label mb-4 flex items-center gap-3">
-            <span class="text-accent">06</span><span class="h-px w-8 bg-primary/60" />{{
+            <span class="text-accent">07</span><span class="h-px w-8 bg-primary/60" />{{
               t('hiveshock.eyebrow')
             }}
           </p>

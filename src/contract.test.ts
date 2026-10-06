@@ -120,6 +120,30 @@ describe('rest fixtures', () => {
     for (const c of r.channels) expectKeys(c, ['platform', 'handle', 'url'])
   })
 
+  it('donors: only what the public board may show', () => {
+    const d = read<{
+      enabled: boolean
+      totals: Record<string, unknown>
+      donors: Record<string, unknown>[]
+    }>('rest/donors.json')
+    expect(d.enabled).toBe(true)
+    expectKeys(d.totals, ['donations', 'addedSeconds', 'removedSeconds'])
+    for (const donor of d.donors) {
+      expectKeys(donor, [
+        'rank',
+        'viewer',
+        'platform',
+        'currency',
+        'donations',
+        'amount',
+        'addedSeconds',
+        'removedSeconds',
+      ])
+      for (const private_ of ['racerId', 'racers', 'lastAt', 'hidden', 'gift'])
+        expect(donor, private_).not.toHaveProperty(private_)
+    }
+  })
+
   it('standings, stream, activity and stats', () => {
     for (const s of read<Record<string, unknown>[]>('rest/standings.json'))
       expectKeys(s, ['racerId', 'rank'])

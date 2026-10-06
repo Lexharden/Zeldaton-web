@@ -683,24 +683,31 @@ pub async fn donation_totals(pool: &SqlitePool) -> Result<Vec<serde_json::Value>
 /// Who donated the most. A donor is one viewer name on one platform (the same handle can exist
 /// on both). Ranked by the time they moved, the only measure that is comparable between TikTok
 /// diamonds and Twitch bits; the amount paid is kept in its own currency. Donations without a
-/// viewer name are left out.
+/// viewer name are left out. Donors the organizer hid are skipped unless `include_hidden` (the
+/// panel shows everyone and marks them).
 pub async fn top_donors(
     pool: &SqlitePool,
     limit: i64,
+    include_hidden: bool,
 ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT MIN(viewer) AS viewer, platform, currency, COUNT(*) AS n, SUM(amount) AS amount,
-                COALESCE(SUM(CASE WHEN applied_ms > 0 THEN applied_ms ELSE 0 END), 0) AS added,
-                COALESCE(SUM(CASE WHEN applied_ms < 0 THEN -applied_ms ELSE 0 END), 0) AS removed,
-                COUNT(DISTINCT racer_id) AS racers,
-                MAX(ts) AS last_ts
-         FROM time_donations
-         WHERE viewer IS NOT NULL AND TRIM(viewer) <> ''
-         GROUP BY LOWER(TRIM(viewer)), platform, currency
-         ORDER BY SUM(ABS(applied_ms)) DESC, SUM(amount) DESC
+        "SELECT MIN(d.viewer) AS viewer, d.platform, d.currency, COUNT(*) AS n, SUM(d.amount) AS amount,
+                COALESCE(SUM(CASE WHEN d.applied_ms > 0 THEN d.applied_ms ELSE 0 END), 0) AS added,
+                COALESCE(SUM(CASE WHEN d.applied_ms < 0 THEN -d.applied_ms ELSE 0 END), 0) AS removed,
+                COUNT(DISTINCT d.racer_id) AS racers,
+                MAX(d.ts) AS last_ts,
+                MAX(CASE WHEN h.platform IS NULL THEN 0 ELSE 1 END) AS hidden
+         FROM time_donations d
+         LEFT JOIN hidden_donors h
+                ON h.platform = d.platform AND h.viewer_key = LOWER(TRIM(d.viewer))
+         WHERE d.viewer IS NOT NULL AND TRIM(d.viewer) <> ''
+           AND (?2 = 1 OR h.platform IS NULL)
+         GROUP BY LOWER(TRIM(d.viewer)), d.platform, d.currency
+         ORDER BY SUM(ABS(d.applied_ms)) DESC, SUM(d.amount) DESC
          LIMIT ?1",
     )
     .bind(limit)
+    .bind(include_hidden)
     .fetch_all(pool)
     .await?;
     Ok(rows
@@ -716,7 +723,65 @@ pub async fn top_donors(
                 "removedSeconds": r.get::<i64, _>("removed") / 1000,
                 "racers": r.get::<i64, _>("racers"),
                 "lastAt": r.get::<String, _>("last_ts"),
+                "hidden": r.get::<i64, _>("hidden") != 0,
             })
         })
         .collect())
+}
+
+/// Event-wide totals of every time donation (hidden donors included: it is an aggregate).
+pub async fn donation_summary(pool: &SqlitePool) -> Result<serde_json::Value, sqlx::Error> {
+    let r = sqlx::query(
+        "SELECT COUNT(*) AS n,
+                COALESCE(SUM(CASE WHEN applied_ms > 0 THEN applied_ms ELSE 0 END), 0) AS added,
+                COALESCE(SUM(CASE WHEN applied_ms < 0 THEN -applied_ms ELSE 0 END), 0) AS removed
+         FROM time_donations",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(serde_json::json!({
+        "donations": r.get::<i64, _>("n"),
+        "addedSeconds": r.get::<i64, _>("added") / 1000,
+        "removedSeconds": r.get::<i64, _>("removed") / 1000,
+    }))
+}
+
+/// A small organizer setting, or `None` when it was never set.
+pub async fn setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT value FROM app_settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+}
+
+pub async fn set_setting(pool: &SqlitePool, key: &str, value: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Hides (or shows again) one donor on the public board.
+pub async fn set_donor_hidden(
+    pool: &SqlitePool,
+    platform: &str,
+    viewer: &str,
+    hidden: bool,
+) -> Result<(), sqlx::Error> {
+    let key = viewer.trim().to_lowercase();
+    if hidden {
+        sqlx::query("INSERT OR IGNORE INTO hidden_donors (platform, viewer_key) VALUES (?, ?)")
+    } else {
+        sqlx::query("DELETE FROM hidden_donors WHERE platform = ? AND viewer_key = ?")
+    }
+    .bind(platform)
+    .bind(key)
+    .execute(pool)
+    .await?;
+    Ok(())
 }

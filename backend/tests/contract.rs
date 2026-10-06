@@ -336,6 +336,21 @@ fn rest_payloads_match_their_fixtures() {
         serde_json::to_value(vec![activity()]).unwrap(),
     );
     check(
+        "rest/donors.json",
+        zeldathon_server::api::donors_payload(
+            true,
+            vec![
+                json!({ "viewer": "FanDeLink", "platform": "tiktok", "currency": "diamonds", "donations": 7,
+                        "amount": 1200, "addedSeconds": 1500, "removedSeconds": 120, "racers": 3,
+                        "lastAt": NOW_ISO, "hidden": false }),
+                json!({ "viewer": "navi_fan", "platform": "twitch", "currency": "bits", "donations": 2,
+                        "amount": 300, "addedSeconds": 600, "removedSeconds": 0, "racers": 1,
+                        "lastAt": NOW_ISO, "hidden": false }),
+            ],
+            json!({ "donations": 9, "addedSeconds": 2100, "removedSeconds": 120 }),
+        ),
+    );
+    check(
         "rest/hiveshock-stats.json",
         serde_json::to_value(&state.stats).unwrap_or_default(),
     );

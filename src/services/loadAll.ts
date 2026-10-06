@@ -1,4 +1,5 @@
 import { useCatalogStore } from '@/stores/catalog'
+import { useDonorsStore } from '@/stores/donors'
 import { useEventStore } from '@/stores/event'
 import { useHiveShockStore } from '@/stores/hiveshock'
 import { useRaceStore } from '@/stores/race'
@@ -11,6 +12,7 @@ export async function loadAllData(): Promise<void> {
     useRacersStore().load(),
     useHiveShockStore().load(),
     useCatalogStore().load(),
+    useDonorsStore().load(),
   ])
   await useRaceStore().load()
 }

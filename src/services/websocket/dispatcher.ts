@@ -1,5 +1,6 @@
 import { loadAllData } from '@/services/loadAll'
 import { useCatalogStore } from '@/stores/catalog'
+import { useDonorsStore } from '@/stores/donors'
 import { useConnectionStore } from '@/stores/connection'
 import { useHiveShockStore } from '@/stores/hiveshock'
 import { useRaceStore } from '@/stores/race'
@@ -87,6 +88,8 @@ export function dispatchMessage(message: WsMessage, serverTimeUtc?: string): voi
       break
     case 'LIVE_ACTIVITY':
       hive.pushActivity(message.activity)
+      // Donation time landed: the donors board changed too.
+      if (message.activity.kind === 'time') useDonorsStore().refreshSoon()
       break
     case 'CATALOG_UPDATED':
       void useCatalogStore().onUpdated(message.version)

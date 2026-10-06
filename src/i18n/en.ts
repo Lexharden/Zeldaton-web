@@ -163,6 +163,19 @@ export const en: Messages = {
     liveStream: 'LIVE STREAM',
     stream: '{name} stream',
   },
+  donors: {
+    eyebrow: 'THE COMMUNITY',
+    title: 'TOP DONORS',
+    subtitle:
+      "The viewers who moved the clock the most with TikTok gifts and Twitch bits: they add or remove racers' time.",
+    aria: 'Donors podium',
+    place: 'Place {n}',
+    count: '{n} donations',
+    diamonds: 'diamonds',
+    bits: 'bits',
+    empty: "No donations yet. A gift on a racer's stream changes their clock: be the first!",
+    totals: '{n} donations in total · +{added} added · −{removed} removed',
+  },
   activity: {
     title: 'LIVE ACTIVITY',
     right: 'RIGHT NOW',
@@ -489,6 +502,10 @@ export const en: Messages = {
         {
           h: 'Who is behind it',
           p: 'This site is built and maintained by Yafel GH for the Zeldatón community event, powered by HiveShock. For any question about your data, reach us through the official event channels.',
+        },
+        {
+          h: 'Donors',
+          p: 'People who donate on racers\' streams (TikTok gifts, Twitch bits) appear in the public "Top donors" ranking with the name those platforms report, the time they moved and how much they gave. If you do not want to appear, ask us through the event\'s official channels and we will hide you from the ranking.',
         },
         {
           h: 'What data we use',

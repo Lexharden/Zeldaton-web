@@ -3,6 +3,7 @@ import { getTransport } from '@/services/websocket'
 import { dispatchMessage } from '@/services/websocket/dispatcher'
 import { loadAllData } from '@/services/loadAll'
 import { useConnectionStore } from '@/stores/connection'
+import { useDonorsStore } from '@/stores/donors'
 import { useEventStore } from '@/stores/event'
 import { useClockResync } from './useRaceClock'
 
@@ -27,6 +28,10 @@ export function useRaceData() {
     useClockResync().start()
     void loadAll()
     transport.connect()
+
+    // The donors board is cheap to poll and changes with every gift; the socket only nudges it.
+    const donors = useDonorsStore()
+    setInterval(() => !document.hidden && void donors.load(), 30_000)
 
     // When the countdown ends, ask the backend for the new event status (upcoming -> live).
     watch(

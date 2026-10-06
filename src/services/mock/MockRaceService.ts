@@ -6,6 +6,7 @@ import { createMockEvent } from '@/data/mock/event'
 import { createMockRacers } from '@/data/mock/racers'
 import { createMockStandings } from '@/data/mock/standings'
 import { createMockStreams } from '@/data/mock/streams'
+import type { DonorsBoard } from '@/types/donors'
 import type { EventInfo, EventStatus } from '@/types/event'
 import type { HiveShockStats } from '@/types/hiveshock'
 import type { Racer } from '@/types/racer'
@@ -140,6 +141,30 @@ export class MockRaceService implements RaceApi {
   async getHiveShockStats() {
     await delay(400)
     return { ...this.stats }
+  }
+  async getDonors(): Promise<DonorsBoard> {
+    await delay(300)
+    const donors: DonorsBoard['donors'] = [
+      ['FanDeLink', 'tiktok', 'diamonds', 7, 1200, 5400, 300],
+      ['navi_fan', 'twitch', 'bits', 4, 800, 3600, 0],
+      ['Epona_Rider', 'tiktok', 'diamonds', 5, 650, 2700, 600],
+      ['deku_nut', 'twitch', 'bits', 3, 300, 1200, 0],
+      ['Zelda_Lover', 'tiktok', 'diamonds', 2, 150, 600, 120],
+    ].map(([viewer, platform, currency, donations, amount, addedSeconds, removedSeconds], i) => ({
+      rank: i + 1,
+      viewer: viewer as string,
+      platform: platform as 'tiktok' | 'twitch',
+      currency: currency as 'diamonds' | 'bits',
+      donations: donations as number,
+      amount: amount as number,
+      addedSeconds: addedSeconds as number,
+      removedSeconds: removedSeconds as number,
+    }))
+    return {
+      enabled: true,
+      totals: { donations: 21, addedSeconds: 13500, removedSeconds: 1020 },
+      donors,
+    }
   }
   async getCatalog() {
     await delay(150)

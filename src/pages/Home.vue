@@ -11,17 +11,20 @@ import ActivityFeed from '@/components/hiveshock/ActivityFeed.vue'
 import HiveShockSection from '@/components/hiveshock/HiveShockSection.vue'
 import HowItWorks from '@/components/race/HowItWorks.vue'
 import RaceIntro from '@/components/race/RaceIntro.vue'
+import DonorsPodium from '@/components/donors/DonorsPodium.vue'
 import RacersGrid from '@/components/racers/RacersGrid.vue'
 import FaqList from '@/components/rules/FaqList.vue'
 import StandingsTable from '@/components/standings/StandingsTable.vue'
 import StreamGrid from '@/components/streams/StreamGrid.vue'
 import Button from '@/components/ui/Button.vue'
 import { useSeo } from '@/composables/useSeo'
+import { useDonorsStore } from '@/stores/donors'
 import { useRacersStore } from '@/stores/racers'
 
 /** Marketing / event introduction. The live dashboard itself lives on /race. */
 useSeo()
 const racers = useRacersStore()
+const donors = useDonorsStore()
 </script>
 
 <template>
@@ -62,6 +65,20 @@ const racers = useRacersStore()
       </div>
     </section>
 
+    <section v-if="donors.visible" id="donors" class="section" aria-labelledby="donors-title">
+      <GamingBackground shapes :grid="false" />
+      <div class="container-x">
+        <SectionHeader
+          id="donors-title"
+          index="05"
+          :eyebrow="t('donors.eyebrow')"
+          :title="t('donors.title')"
+          :subtitle="t('donors.subtitle')"
+        />
+        <DonorsPodium />
+      </div>
+    </section>
+
     <section id="streams" class="section" aria-labelledby="streams-title">
       <GamingBackground :grid="false" :art="ART.bgField" />
       <div class="container-x">
@@ -69,7 +86,7 @@ const racers = useRacersStore()
           <SectionHeader
             id="streams-title"
             class="!mb-0"
-            index="05"
+            index="06"
             :eyebrow="t('streams.eyebrow')"
             :title="t('streams.title')"
             :subtitle="t('streams.subtitle')"
@@ -96,7 +113,7 @@ const racers = useRacersStore()
       <div class="container-x">
         <SectionHeader
           id="how-title"
-          index="07"
+          index="08"
           :eyebrow="t('how.eyebrow')"
           :title="t('how.title')"
         />
@@ -109,7 +126,7 @@ const racers = useRacersStore()
         <div>
           <SectionHeader
             id="faq-title"
-            index="08"
+            index="09"
             :eyebrow="t('rulesPage.home.eyebrow')"
             :title="[t('rulesPage.home.title1'), t('rulesPage.home.title2')]"
           />

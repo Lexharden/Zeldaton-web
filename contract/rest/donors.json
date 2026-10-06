@@ -1,0 +1,30 @@
+{
+  "donors": [
+    {
+      "addedSeconds": 1500,
+      "amount": 1200,
+      "currency": "diamonds",
+      "donations": 7,
+      "platform": "tiktok",
+      "rank": 1,
+      "removedSeconds": 120,
+      "viewer": "FanDeLink"
+    },
+    {
+      "addedSeconds": 600,
+      "amount": 300,
+      "currency": "bits",
+      "donations": 2,
+      "platform": "twitch",
+      "rank": 2,
+      "removedSeconds": 0,
+      "viewer": "navi_fan"
+    }
+  ],
+  "enabled": true,
+  "totals": {
+    "addedSeconds": 2100,
+    "donations": 9,
+    "removedSeconds": 120
+  }
+}

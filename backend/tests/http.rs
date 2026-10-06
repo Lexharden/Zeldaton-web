@@ -1600,3 +1600,160 @@ async fn resetting_the_event_wipes_the_test_run_and_keeps_racers_tokens_and_cata
     let (s, _) = reset(json!({ "confirm": "REINICIAR", "startAtUtc": in_30_days })).await;
     assert_eq!(s, StatusCode::CONFLICT);
 }
+
+#[tokio::test]
+async fn the_public_donors_board_shows_only_what_is_meant_and_the_organizer_controls_it() {
+    let h = harness().await;
+    make_event_live(&h).await;
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    wait_for(&mut hs, "CLOCK").await;
+    let donations = [
+        ("a1", 600, "twitch", "bits", 100, "Mayor"),
+        ("a2", 120, "tiktok", "diamonds", 50, "Menor"),
+        ("a3", 60, "twitch", "bits", 20, "mayor"), // same person, other case
+        ("a4", -30, "tiktok", "diamonds", 10, "Oculto"),
+    ];
+    for (id, delta, platform, currency, amount, viewer) in donations {
+        send(&mut hs, json!({ "type": "TIME_DONATION", "id": id, "deltaSeconds": delta,
+            "source": { "platform": platform, "currency": currency, "amount": amount, "viewer": viewer } })).await;
+        wait_for(&mut hs, "TIME_APPLIED").await;
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // Public: ranked by time moved, same viewer merged, nothing sensitive.
+    let (s, board) = call(&h, "GET", "/api/donors", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(board["enabled"], true);
+    let donors = board["donors"].as_array().unwrap();
+    let names: Vec<_> = donors
+        .iter()
+        .map(|d| d["viewer"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["Mayor", "Menor", "Oculto"]);
+    assert_eq!(donors[0]["rank"], 1);
+    assert_eq!(donors[0]["donations"], 2);
+    assert_eq!(donors[0]["addedSeconds"], 660);
+    assert_eq!(donors[0]["amount"], 120);
+    for d in donors {
+        for private in ["racerId", "racers", "lastAt", "hidden", "gift", "ts"] {
+            assert!(d.get(private).is_none(), "{private} must not be public");
+        }
+    }
+    assert_eq!(board["totals"]["donations"], 4);
+    assert_eq!(board["totals"]["addedSeconds"], 780);
+    assert_eq!(board["totals"]["removedSeconds"], 30);
+    let (_, one) = call(&h, "GET", "/api/donors?limit=1", None, None).await;
+    assert_eq!(one["donors"].as_array().unwrap().len(), 1);
+
+    // The organizer hides one donor: gone from the public board, still in the panel (marked).
+    let hide = json!({ "platform": "tiktok", "viewer": " OCULTO ", "hidden": true });
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/donors/hidden",
+        None,
+        Some(hide.clone()),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/donors/hidden",
+        Some(ADMIN),
+        Some(hide),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, board) = call(&h, "GET", "/api/donors", None, None).await;
+    let names: Vec<_> = board["donors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["viewer"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["Mayor", "Menor"]);
+    let (_, panel) = call(&h, "GET", "/api/admin/donations", Some(ADMIN), None).await;
+    let hidden = panel["donors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["viewer"] == "Oculto")
+        .unwrap();
+    assert_eq!(hidden["hidden"], true);
+    assert_eq!(panel["donorsPublic"], true);
+    let bad = json!({ "platform": "myspace", "viewer": "x", "hidden": true });
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/donors/hidden",
+        Some(ADMIN),
+        Some(bad),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // Showing them again, and the global switch.
+    let show = json!({ "platform": "tiktok", "viewer": "oculto", "hidden": false });
+    call(
+        &h,
+        "PUT",
+        "/api/admin/donors/hidden",
+        Some(ADMIN),
+        Some(show),
+    )
+    .await;
+    let (_, board) = call(&h, "GET", "/api/donors", None, None).await;
+    assert_eq!(board["donors"].as_array().unwrap().len(), 3);
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/donors/visibility",
+        Some(ADMIN),
+        Some(json!({ "enabled": false })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, board) = call(&h, "GET", "/api/donors", None, None).await;
+    assert_eq!(board["enabled"], false);
+    assert!(board["donors"].as_array().unwrap().is_empty());
+    assert_eq!(board["totals"]["donations"], 0);
+    let (_, panel) = call(&h, "GET", "/api/admin/donations", Some(ADMIN), None).await;
+    assert_eq!(panel["donorsPublic"], false);
+    assert_eq!(panel["donors"].as_array().unwrap().len(), 3); // the panel still sees everyone
+    call(
+        &h,
+        "PUT",
+        "/api/admin/donors/visibility",
+        Some(ADMIN),
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    let (_, audit) = call(&h, "GET", "/api/admin/audit", Some(ADMIN), None).await;
+    let actions: Vec<_> = audit
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["action"].as_str().unwrap())
+        .collect();
+    assert!(actions.contains(&"donors.hide") && actions.contains(&"donors.visibility"));
+
+    // Resetting the event (paused, so allowed) empties the board.
+    call(&h, "POST", "/api/admin/event/pause", Some(ADMIN), None).await;
+    let start = (Utc::now() + chrono::Duration::days(30)).to_rfc3339();
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/event/reset",
+        Some(ADMIN),
+        Some(json!({ "confirm": "REINICIAR", "startAtUtc": start })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let (_, board) = call(&h, "GET", "/api/donors", None, None).await;
+    assert!(board["donors"].as_array().unwrap().is_empty());
+}

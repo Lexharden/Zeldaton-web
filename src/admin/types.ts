@@ -138,9 +138,13 @@ export interface TopDonor {
   /** How many different racers they donated to. */
   racers: number
   lastAt: string
+  /** Hidden from the public board (still counted and listed here). */
+  hidden: boolean
 }
 
 export interface DonationsResponse {
+  /** Whether the public site shows the donors board. */
+  donorsPublic: boolean
   policy: DonationTimePolicy
   /** What counts against today's limits, per racer. */
   today: { racerId: string; addedSeconds: number; removedSeconds: number }[]

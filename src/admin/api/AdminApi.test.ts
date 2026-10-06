@@ -167,4 +167,26 @@ describe('AdminApi', () => {
       leaveRehearsal: true,
     })
   })
+
+  it('hides a donor and switches the public board with the CSRF token', async () => {
+    const { fetcher, calls } = fakeFetch([
+      { body: { user: { id: 1, username: 'ana', role: 'admin' }, csrfToken: 'csrf-3' } },
+      { body: { ok: true } },
+      { body: { donorsPublic: false } },
+    ])
+    const api = new AdminApi('/api/admin', fetcher)
+    await api.login('ana', 'pw')
+    await api.setDonorHidden('tiktok', 'Fan Uno', true)
+    await api.setDonorsVisible(false)
+    expect(calls[1].url).toBe('/api/admin/donors/hidden')
+    expect(calls[1].init.method).toBe('PUT')
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({
+      platform: 'tiktok',
+      viewer: 'Fan Uno',
+      hidden: true,
+    })
+    expect(headersOf(calls[1].init)['X-CSRF-Token']).toBe('csrf-3')
+    expect(calls[2].url).toBe('/api/admin/donors/visibility')
+    expect(JSON.parse(String(calls[2].init.body))).toEqual({ enabled: false })
+  })
 })

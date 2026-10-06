@@ -155,6 +155,12 @@ export class AdminApi {
   resetEvent = (body: { confirm: string; startAtUtc?: string; leaveRehearsal: boolean }) =>
     this.request<EventInfo>('POST', '/event/reset', body)
 
+  // ---- public donors board
+  setDonorsVisible = (enabled: boolean) =>
+    this.request<{ donorsPublic: boolean }>('PUT', '/donors/visibility', { enabled })
+  setDonorHidden = (platform: string, viewer: string, hidden: boolean) =>
+    this.request<{ ok: true }>('PUT', '/donors/hidden', { platform, viewer, hidden })
+
   // ---- racer photos
   /** Uploads the photo itself (not JSON); the server stores it and points the racer's avatar at it. */
   async uploadRacerPhoto(id: string, file: Blob): Promise<Racer> {

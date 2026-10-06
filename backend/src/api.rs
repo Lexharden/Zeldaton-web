@@ -1,6 +1,6 @@
 //! Public REST API consumed by the frontend (`src/services/api/HttpRaceApi.ts`).
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::header::{CACHE_CONTROL, HeaderValue};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -32,6 +32,7 @@ pub fn router() -> Router<AppState> {
         ));
     // Pictures are cacheable (they set their own Cache-Control), unlike the live race data.
     live.route("/media/racers/{file}", get(crate::media::serve))
+        .route("/donors", get(donors))
 }
 
 async fn health(State(hub): State<AppState>) -> Json<Value> {
@@ -95,4 +96,60 @@ async fn catalog(State(hub): State<AppState>) -> Json<Value> {
 
 async fn clocks(State(hub): State<AppState>) -> Json<Vec<ClockState>> {
     Json(hub.clocks(Utc::now()))
+}
+
+#[derive(serde::Deserialize)]
+struct DonorsQuery {
+    limit: Option<i64>,
+}
+
+/// What the public donors board exposes: ranked donors with only the fields meant to be shown
+/// (no racers, dates or gifts) and event-wide totals. `rows` come from `db::top_donors`.
+pub fn donors_payload(enabled: bool, rows: Vec<Value>, totals: Value) -> Value {
+    let donors: Vec<Value> = rows
+        .into_iter()
+        .enumerate()
+        .map(|(i, d)| {
+            json!({
+                "rank": i + 1,
+                "viewer": d["viewer"],
+                "platform": d["platform"],
+                "currency": d["currency"],
+                "donations": d["donations"],
+                "amount": d["amount"],
+                "addedSeconds": d["addedSeconds"],
+                "removedSeconds": d["removedSeconds"],
+            })
+        })
+        .collect();
+    json!({ "enabled": enabled, "totals": totals, "donors": donors })
+}
+
+/// The public donors board. Donors the organizer hid are left out, and the whole board is empty
+/// while the organizer has it switched off. Cacheable for a few seconds.
+async fn donors(
+    State(hub): State<AppState>,
+    Query(q): Query<DonorsQuery>,
+) -> Result<impl axum::response::IntoResponse, ApiError> {
+    let enabled = crate::admin::donors_public(&hub.pool).await;
+    let body = if enabled {
+        let limit = q.limit.unwrap_or(10).clamp(1, 20);
+        let rows = crate::db::top_donors(&hub.pool, limit, false)
+            .await
+            .map_err(ApiError::internal)?;
+        let totals = crate::db::donation_summary(&hub.pool)
+            .await
+            .map_err(ApiError::internal)?;
+        donors_payload(true, rows, totals)
+    } else {
+        let totals = json!({ "donations": 0, "addedSeconds": 0, "removedSeconds": 0 });
+        donors_payload(false, vec![], totals)
+    };
+    Ok((
+        [(
+            CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=15"),
+        )],
+        Json(body),
+    ))
 }

@@ -34,4 +34,13 @@ export function formatCount(value: number): string {
   return new Intl.NumberFormat(intlLocale.value).format(Math.round(value))
 }
 
+/** "45s", "12m" or "2h 10m": a short span for totals (not a clock). */
+export function formatSpan(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds))
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  const m = Math.floor((s % 3600) / 60)
+  return m ? `${Math.floor(s / 3600)}h ${m}m` : `${Math.floor(s / 3600)}h`
+}
+
 export const twoDigits = (n: number) => pad(n)

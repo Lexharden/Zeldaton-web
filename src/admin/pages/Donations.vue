@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RefreshCw } from 'lucide-vue-next'
+import { Eye, EyeOff, RefreshCw } from 'lucide-vue-next'
 import PlatformIcon from '@/components/racers/PlatformIcon.vue'
 import { adminApi } from '../api/AdminApi'
 import { localDateTime, secondsLabel, shortDuration } from '../format'
@@ -83,6 +83,32 @@ const MEDALS = ['🥇', '🥈', '🥉']
 function paidText(d: TopDonor): string {
   const unit = d.currency === 'bits' ? 'bits' : 'diamantes'
   return `${d.amount.toLocaleString('es-MX')} ${unit}`
+}
+
+async function toggleDonor(d: TopDonor) {
+  try {
+    await adminApi.setDonorHidden(d.platform, d.viewer, !d.hidden)
+    toasts.success(
+      d.hidden ? `«${d.viewer}» vuelve a verse en la web.` : `«${d.viewer}» ya no se ve en la web.`,
+    )
+    await load()
+  } catch (e) {
+    toasts.error(messageOf(e))
+  }
+}
+
+async function togglePublic(enabled: boolean) {
+  try {
+    await adminApi.setDonorsVisible(enabled)
+    toasts.success(
+      enabled
+        ? 'El top de donadores se muestra en la web.'
+        : 'El top de donadores ya no se muestra en la web.',
+    )
+    await load()
+  } catch (e) {
+    toasts.error(messageOf(e))
+  }
 }
 
 function signed(seconds: number): string {
@@ -169,7 +195,16 @@ const LIMITS: Record<string, string> = {
 
       <section class="panel mb-6">
         <header class="px-4 pt-4">
-          <h2 class="display text-2xl text-white">Top donadores</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="display text-2xl text-white">Top donadores</h2>
+            <label class="flex items-center gap-2 text-sm text-secondary">
+              <input
+                type="checkbox"
+                :checked="data.donorsPublic"
+                @change="togglePublic(($event.target as HTMLInputElement).checked)"
+              />Mostrar en la web
+            </label>
+          </div>
           <p class="text-xs text-muted">
             Quién movió más el reloj en todo el evento (suma de tiempo aplicado, sumado y restado).
             Los diamantes de TikTok y los bits de Twitch no se pueden comparar, por eso se ordena
@@ -187,10 +222,15 @@ const LIMITS: Record<string, string> = {
                 <th>Sumó</th>
                 <th>Restó</th>
                 <th>Corredores</th>
+                <th>En la web</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(d, i) in data.donors" :key="`${d.platform}-${d.viewer}`">
+              <tr
+                v-for="(d, i) in data.donors"
+                :key="`${d.platform}-${d.viewer}`"
+                :class="d.hidden && 'opacity-50'"
+              >
                 <td class="num text-lg">{{ MEDALS[i] ?? i + 1 }}</td>
                 <td>
                   <span class="inline-flex items-center gap-1.5 font-semibold text-white">
@@ -202,9 +242,22 @@ const LIMITS: Record<string, string> = {
                 <td class="num text-success">{{ signed(d.addedSeconds) }}</td>
                 <td class="num text-[#ff8aa0]">{{ signed(-d.removedSeconds) }}</td>
                 <td class="num">{{ d.racers }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="a-btn a-btn-sm"
+                    :aria-label="d.hidden ? `Mostrar a ${d.viewer}` : `Ocultar a ${d.viewer}`"
+                    :title="
+                      d.hidden ? 'Oculto: pulsa para mostrarlo' : 'Visible: pulsa para ocultarlo'
+                    "
+                    @click="toggleDonor(d)"
+                  >
+                    <EyeOff v-if="d.hidden" class="size-3.5" /><Eye v-else class="size-3.5" />
+                  </button>
+                </td>
               </tr>
               <tr v-if="!data.donors.length">
-                <td colspan="7" class="py-6 text-center text-muted">
+                <td colspan="8" class="py-6 text-center text-muted">
                   Todavía no hay donadores con nombre.
                 </td>
               </tr>

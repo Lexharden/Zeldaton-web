@@ -44,5 +44,6 @@ export class HttpRaceApi implements RaceApi {
   getActivity = () => this.request<Awaited<ReturnType<RaceApi['getActivity']>>>('/activity')
   getHiveShockStats = () =>
     this.request<Awaited<ReturnType<RaceApi['getHiveShockStats']>>>('/hiveshock/stats')
+  getDonors = () => this.request<Awaited<ReturnType<RaceApi['getDonors']>>>('/donors?limit=10')
   getClocks = () => this.request<Awaited<ReturnType<RaceApi['getClocks']>>>('/clocks')
 }

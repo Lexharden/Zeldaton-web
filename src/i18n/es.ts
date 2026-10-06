@@ -162,6 +162,20 @@ export const es = {
     liveStream: 'STREAM EN VIVO',
     stream: 'Stream de {name}',
   },
+  donors: {
+    eyebrow: 'LA COMUNIDAD',
+    title: 'TOP DONADORES',
+    subtitle:
+      'Quienes más han movido el reloj con sus regalos de TikTok y bits de Twitch: suman o restan tiempo a los corredores.',
+    aria: 'Podio de donadores',
+    place: 'Lugar {n}',
+    count: '{n} donaciones',
+    diamonds: 'diamantes',
+    bits: 'bits',
+    empty:
+      'Todavía no hay donaciones. Un regalo en el stream de un corredor cambia su reloj: ¡sé el primero!',
+    totals: '{n} donaciones en total · +{added} sumadas · −{removed} restadas',
+  },
   activity: {
     title: 'ACTIVIDAD EN VIVO',
     right: 'AHORA MISMO',
@@ -490,6 +504,10 @@ export const es = {
         {
           h: 'Quién está detrás',
           p: 'Esta web la desarrolla y mantiene Yafel GH para el evento comunitario Zeldatón, con la tecnología de HiveShock. Para cualquier duda sobre tus datos, escríbenos por los canales oficiales del evento.',
+        },
+        {
+          h: 'Donadores',
+          p: 'Quienes donan en los streams de los corredores (regalos de TikTok, bits de Twitch) aparecen en el ranking público «Top donadores» con el nombre que esas plataformas informan, el tiempo que movieron y cuánto donaron. Si no quieres aparecer, pídenos quitarte por los canales oficiales del evento y te ocultamos del ranking.',
         },
         {
           h: 'Qué datos usamos',
