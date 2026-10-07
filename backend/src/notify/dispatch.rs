@@ -118,7 +118,6 @@ fn snapshot(hub: &AppState, now: DateTime<Utc>) -> Snapshot {
                     remaining_ms: views[i].remaining_seconds * 1000,
                     is_live: rt.racer.stream.as_ref().is_some_and(|st| st.is_live),
                     connected: rt.ingest.is_some(),
-                    played: rt.played_ms_total > 0 || rt.racer.progress_percentage > 0.0,
                     day_key: crate::engine::iso(rt.reset_at),
                 }
             })

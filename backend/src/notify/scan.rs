@@ -97,8 +97,6 @@ pub struct RacerSnap {
     pub is_live: bool,
     /// HiveShock is connected.
     pub connected: bool,
-    /// Has played something already (so being offline is unexpected, not just "not started").
-    pub played: bool,
     /// Changes with the racer's daily reset: a once-a-day alert is keyed on it.
     pub day_key: String,
 }
@@ -109,6 +107,11 @@ pub struct Snapshot {
     pub racers: Vec<RacerSnap>,
     /// First place, only when the lead is meaningful (someone progressed and nobody has won yet).
     pub leader: Option<String>,
+}
+
+/// The game is being played (its clock runs or is paused).
+fn is_playing(status: RacerStatus) -> bool {
+    matches!(status, RacerStatus::Live | RacerStatus::Paused)
 }
 
 // ---- the scanner -------------------------------------------------------------------------------
@@ -125,7 +128,10 @@ pub struct ScanState {
     announcer: Announcer,
     lead: Lead,
     offline_since: HashMap<String, DateTime<Utc>>,
-    seen_connected: HashSet<String>,
+    /// Racers seen playing (live or paused) while connected, and not seen stopping since. Only
+    /// these can *drop*: someone who closed the game on purpose, or has not started, is not an
+    /// incident, because nobody is expected to be connected at any fixed hour.
+    was_playing: HashSet<String>,
     disconnect_alerted: HashSet<String>,
     low_alerted: HashSet<String>,
 }
@@ -147,8 +153,12 @@ impl ScanState {
             .collect();
         self.announcer.prime(now, &live);
         self.lead.announced = snap.leader.clone();
-        for r in snap.racers.iter().filter(|r| r.connected) {
-            self.seen_connected.insert(r.info.id.clone());
+        for r in snap
+            .racers
+            .iter()
+            .filter(|r| r.connected && is_playing(r.status))
+        {
+            self.was_playing.insert(r.info.id.clone());
         }
     }
 
@@ -165,6 +175,7 @@ impl ScanState {
         if !snap.event_live {
             self.announcer.clear_live();
             self.offline_since.clear();
+            self.was_playing.clear();
             self.lead.candidate = None;
             return Vec::new();
         }
@@ -236,7 +247,12 @@ impl ScanState {
 
             // Disconnected for long, and back again.
             if r.connected {
-                self.seen_connected.insert(id.clone());
+                // Playing now, or stopped on purpose (the game was closed: back to waiting).
+                if is_playing(r.status) {
+                    self.was_playing.insert(id.clone());
+                } else {
+                    self.was_playing.remove(id);
+                }
                 self.offline_since.remove(id);
                 if self.disconnect_alerted.remove(id) {
                     out.push(Notice::new(
@@ -248,7 +264,7 @@ impl ScanState {
                         now,
                     ));
                 }
-            } else if !out_of_play && (self.seen_connected.contains(id) || r.played) {
+            } else if !out_of_play && self.was_playing.contains(id) {
                 let since = *self.offline_since.entry(id.clone()).or_insert(now);
                 let minutes = (now - since).num_minutes();
                 if minutes >= t.disconnect_minutes && self.disconnect_alerted.insert(id.clone()) {
@@ -364,7 +380,6 @@ mod tests {
             remaining_ms: 3 * 3600 * 1000,
             is_live: false,
             connected: true,
-            played: true,
             day_key: "d1".into(),
         }
     }
@@ -483,13 +498,117 @@ mod tests {
         );
     }
 
+    /// A racer as seen after their connection dropped: the engine marks them offline.
+    fn dropped(id: &str) -> RacerSnap {
+        let mut r = racer(id);
+        r.connected = false;
+        r.status = RacerStatus::Offline;
+        r
+    }
+    fn waiting(id: &str) -> RacerSnap {
+        let mut r = racer(id);
+        r.status = RacerStatus::Online;
+        r
+    }
+    fn paused(id: &str) -> RacerSnap {
+        let mut r = racer(id);
+        r.status = RacerStatus::Paused;
+        r
+    }
+
+    #[test]
+    fn closing_the_game_on_purpose_is_not_a_disconnection() {
+        let th = Thresholds::default(); // 3 minutes
+        let mut s = ScanState::default();
+        assert!(
+            s.scan(&snap(vec![racer("ana")], None), &th, false, t(0))
+                .is_empty()
+        );
+        // The session ends (back to waiting) and then HiveShock is closed.
+        assert!(
+            s.scan(&snap(vec![waiting("ana")], None), &th, false, t(60))
+                .is_empty()
+        );
+        for secs in [70, 400, 4000] {
+            assert!(
+                s.scan(&snap(vec![dropped("ana")], None), &th, false, t(secs))
+                    .is_empty(),
+                "{secs}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_drop_in_the_middle_of_a_game_is_alerted_once_and_closed_when_back() {
+        let th = Thresholds::default();
+        let mut s = ScanState::default();
+        // Paused counts as playing too.
+        s.scan(&snap(vec![paused("ana")], None), &th, false, t(0));
+        assert!(
+            s.scan(&snap(vec![dropped("ana")], None), &th, false, t(10))
+                .is_empty()
+        );
+        let n = s.scan(&snap(vec![dropped("ana")], None), &th, false, t(200));
+        assert_eq!(kinds(&n), ["Disconnected"]);
+        assert!(
+            s.scan(&snap(vec![dropped("ana")], None), &th, false, t(900))
+                .is_empty()
+        );
+        let n = s.scan(&snap(vec![waiting("ana")], None), &th, false, t(1000));
+        assert_eq!(
+            n[0].detail,
+            Detail::Disconnected {
+                minutes: 0,
+                back: true
+            }
+        );
+    }
+
+    #[test]
+    fn stopping_after_a_drop_does_not_alert_a_second_time_for_the_same_racer() {
+        let th = Thresholds::default();
+        let mut s = ScanState::default();
+        s.scan(&snap(vec![racer("ana")], None), &th, false, t(0));
+        s.scan(&snap(vec![dropped("ana")], None), &th, false, t(200));
+        // Back, closes the game properly, goes away: no new alert.
+        s.scan(&snap(vec![waiting("ana")], None), &th, false, t(300));
+        for secs in [310, 700, 5000] {
+            assert!(
+                s.scan(&snap(vec![dropped("ana")], None), &th, false, t(secs))
+                    .is_empty()
+            );
+        }
+    }
+
+    #[test]
+    fn a_pause_of_the_event_forgets_who_was_playing_and_a_restart_remembers_who_still_is() {
+        let th = Thresholds::default();
+        let mut s = ScanState::default();
+        s.scan(&snap(vec![racer("ana")], None), &th, false, t(0));
+        let mut halted = snap(vec![dropped("ana")], None);
+        halted.event_live = false;
+        s.scan(&halted, &th, false, t(10));
+        // The event runs again: nobody was playing as far as the scanner knows.
+        for secs in [20, 400] {
+            assert!(
+                s.scan(&snap(vec![dropped("ana")], None), &th, false, t(secs))
+                    .is_empty()
+            );
+        }
+        // After a restart whoever is connected and playing is already tracked.
+        let mut s = ScanState::default();
+        s.prime(t(0), &snap(vec![racer("beto")], None));
+        s.scan(&snap(vec![dropped("beto")], None), &th, false, t(10));
+        let n = s.scan(&snap(vec![dropped("beto")], None), &th, false, t(200));
+        assert_eq!(kinds(&n), ["Disconnected"]);
+    }
+
     #[test]
     fn nobody_is_alerted_for_not_being_connected_yet_or_for_being_done() {
         let th = Thresholds::default();
         let mut s = ScanState::default();
         let mut never = racer("nuevo");
         never.connected = false;
-        never.played = false;
         let mut done = racer("fin");
         done.connected = false;
         done.status = RacerStatus::Finished;
