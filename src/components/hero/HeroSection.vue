@@ -73,9 +73,11 @@ const pillars = computed(() => [
         </p>
 
         <div class="enter mt-9 max-w-xl" style="--d: 3">
-          <p class="hud-label mb-3 !text-secondary">
-            {{ event.status === 'live' ? t('hero.raceTime') : headline.eyebrow }}
-          </p>
+          <template v-if="event.status === 'live'">
+            <p class="display text-2xl text-white sm:text-3xl">▲ {{ t('hero.raceTime') }}</p>
+            <p class="hud-label mb-3 mt-1 !text-accent">{{ t('hero.raceTimeHint') }}</p>
+          </template>
+          <p v-else class="hud-label mb-3 !text-secondary">{{ headline.eyebrow }}</p>
           <template v-if="event.info && event.status !== 'finished'">
             <Countdown
               :target="event.startMs"

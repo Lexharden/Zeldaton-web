@@ -27,12 +27,16 @@ const cells = computed(() => [
   >
     <template v-for="(cell, i) in cells" :key="cell.key">
       <div class="relative text-center">
-        <div class="panel panel-sm" :class="cell.key === 'seconds' && 'panel-gold'">
+        <div
+          class="panel panel-sm"
+          :class="(mode === 'up' || cell.key === 'seconds') && 'panel-gold'"
+        >
           <div
             class="num font-bold leading-none text-white"
             :class="compact ? 'py-3 text-3xl' : 'py-4 text-[clamp(2rem,9vw,4.75rem)] sm:py-6'"
           >
-            {{ twoDigits(cell.value) }}
+            <span v-if="mode === 'up' && i === 0" class="text-accent" aria-hidden="true">+</span
+            >{{ twoDigits(cell.value) }}
           </div>
         </div>
         <span class="hud-label mt-2 block text-[9px] sm:text-[11px]">{{ cell.label }}</span>
