@@ -168,7 +168,6 @@ const levelTone = {
                 <th class="text-right">
                   Viewers
                   <InfoTip
-                    align="end"
                     text="Espectadores conectados a su transmisión en este momento (Twitch o TikTok). Aparece — si no está transmitiendo o HiveShock no lo reporta."
                   />
                 </th>
