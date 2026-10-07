@@ -36,6 +36,12 @@ const donations = ref({
   perDonationMin: 60,
   addedPerDayMin: 240,
   removedPerDayMin: 240,
+  // The server computes a donation's time from these (HiveShock only picks add or remove).
+  // Unchecked = the number HiveShock sends is used as it is.
+  useDiamondRate: true,
+  secondsPerDiamond: 3,
+  useBitRate: false,
+  secondsPerBit: 1,
 })
 function loadDonations(p: DonationTimePolicy = DEFAULT_DONATIONS) {
   donations.value = {
@@ -45,6 +51,11 @@ function loadDonations(p: DonationTimePolicy = DEFAULT_DONATIONS) {
     perDonationMin: Math.round(p.maxSecondsPerDonation / 60),
     addedPerDayMin: Math.round(p.maxAddedSecondsPerDay / 60),
     removedPerDayMin: Math.round(p.maxRemovedSecondsPerDay / 60),
+    // An older server sends no rate fields: the server default is 3 s per diamond.
+    useDiamondRate: p.secondsPerDiamond === undefined ? true : p.secondsPerDiamond !== null,
+    secondsPerDiamond: p.secondsPerDiamond ?? 3,
+    useBitRate: p.secondsPerBit !== undefined && p.secondsPerBit !== null,
+    secondsPerBit: p.secondsPerBit ?? 1,
   }
 }
 const donationPolicy = computed<DonationTimePolicy>(() => ({
@@ -54,6 +65,10 @@ const donationPolicy = computed<DonationTimePolicy>(() => ({
   maxSecondsPerDonation: Math.round(donations.value.perDonationMin * 60),
   maxAddedSecondsPerDay: Math.round(donations.value.addedPerDayMin * 60),
   maxRemovedSecondsPerDay: Math.round(donations.value.removedPerDayMin * 60),
+  secondsPerDiamond: donations.value.useDiamondRate
+    ? Math.round(donations.value.secondsPerDiamond)
+    : null,
+  secondsPerBit: donations.value.useBitRate ? Math.round(donations.value.secondsPerBit) : null,
 }))
 const donationsError = computed(() => {
   const p = donationPolicy.value
@@ -64,6 +79,12 @@ const donationsError = computed(() => {
     !(p.maxRemovedSecondsPerDay >= 0 && p.maxRemovedSecondsPerDay <= 172800)
   )
     return 'Los topes diarios van de 0 a 48 horas.'
+  for (const [use, v] of [
+    [donations.value.useDiamondRate, donations.value.secondsPerDiamond],
+    [donations.value.useBitRate, donations.value.secondsPerBit],
+  ] as const)
+    if (use && !(Number.isInteger(v) && v >= 1 && v <= 3600))
+      return 'La tarifa va de 1 a 3600 segundos por unidad (número entero).'
   return ''
 })
 
@@ -297,6 +318,54 @@ async function save() {
                 :disabled="!donations.enabled || !donations.allowRemove"
               />
             </div>
+          </div>
+          <div class="grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
+            <div>
+              <label class="flex items-center gap-2 text-sm">
+                <input
+                  v-model="donations.useDiamondRate"
+                  type="checkbox"
+                  :disabled="!donations.enabled"
+                />
+                <span class="text-white">Tarifa fija por diamante de TikTok</span>
+              </label>
+              <label class="a-label mt-2" for="don-diamond">Segundos por diamante</label>
+              <input
+                id="don-diamond"
+                v-model.number="donations.secondsPerDiamond"
+                type="number"
+                min="1"
+                max="3600"
+                class="a-input"
+                :disabled="!donations.enabled || !donations.useDiamondRate"
+              />
+            </div>
+            <div>
+              <label class="flex items-center gap-2 text-sm">
+                <input
+                  v-model="donations.useBitRate"
+                  type="checkbox"
+                  :disabled="!donations.enabled"
+                />
+                <span class="text-white">Tarifa fija por bit de Twitch</span>
+              </label>
+              <label class="a-label mt-2" for="don-bit">Segundos por bit</label>
+              <input
+                id="don-bit"
+                v-model.number="donations.secondsPerBit"
+                type="number"
+                min="1"
+                max="3600"
+                class="a-input"
+                :disabled="!donations.enabled || !donations.useBitRate"
+              />
+            </div>
+            <p class="a-hint sm:col-span-2">
+              Con la tarifa fija, <strong>el servidor calcula el tiempo</strong> (cantidad ×
+              segundos) y a HiveShock solo le toma si suma o resta, así todos los corredores valen
+              igual aunque su HiveShock tenga otra tarifa. Sin la casilla, se usa el número que
+              mande HiveShock (siempre limitado por los topes).
+            </p>
           </div>
           <p v-if="donationsError" class="a-error">{{ donationsError }}</p>
           <p v-else-if="donations.enabled" class="a-hint">

@@ -245,4 +245,28 @@ describe('AdminApi', () => {
     expect(JSON.parse(String(calls[3].init.body))).toEqual({ channel: 'staff' })
     expect(headersOf(calls[3].init)['X-CSRF-Token']).toBe('csrf-4')
   })
+
+  it("sends the donation rate with the rest of the limits (null = use HiveShock's number)", async () => {
+    const { fetcher, calls } = fakeFetch([
+      { body: { user: { id: 1, username: 'ana', role: 'admin' }, csrfToken: 'csrf-7' } },
+      { body: {} },
+    ])
+    const api = new AdminApi('/api/admin', fetcher)
+    await api.login('ana', 'pw')
+    await api.updateEvent({
+      donationTime: {
+        enabled: true,
+        allowAdd: true,
+        allowRemove: true,
+        maxSecondsPerDonation: 300,
+        maxAddedSecondsPerDay: 3600,
+        maxRemovedSecondsPerDay: 3600,
+        secondsPerDiamond: 3,
+        secondsPerBit: null,
+      },
+    })
+    const body = JSON.parse(String(calls[1].init.body))
+    expect(body.donationTime.secondsPerDiamond).toBe(3)
+    expect(body.donationTime.secondsPerBit).toBeNull()
+  })
 })

@@ -178,11 +178,14 @@ pub fn render(n: &Notice, ctx: &Ctx) -> Value {
                 )
             }
         }
-        Detail::Exhausted => embed(
+        Detail::Exhausted { played_seconds } => embed(
             n,
             ctx,
             format!("⏱️ {name} se quedó sin tiempo"),
-            format!("{progress}\nVuelve a jugar cuando se reinicie su día."),
+            format!(
+                "{progress}\n🕹️ Jugó **{}** hoy.\nVuelve a jugar cuando se reinicie su día.",
+                hms(*played_seconds)
+            ),
             ORANGE,
             true,
         ),
@@ -455,7 +458,15 @@ mod tests {
                 .unwrap()
                 .contains("Jefes derrotados: **2**")
         );
-        assert!(title(&render(&notice(Detail::Exhausted), &ctx())).contains("se quedó sin tiempo"));
+        assert!(
+            title(&render(
+                &notice(Detail::Exhausted {
+                    played_seconds: 13_932
+                }),
+                &ctx()
+            ))
+            .contains("se quedó sin tiempo")
+        );
         let lead = render(
             &notice(Detail::Leader {
                 previous: Some("Cuaco".into()),
@@ -495,7 +506,9 @@ mod tests {
         assert!(title(&rehearsal).starts_with("[ENSAYO] "));
         // The community channel never says "ensayo" (it is not even sent in rehearsal).
         let public = render(
-            &notice(Detail::Exhausted),
+            &notice(Detail::Exhausted {
+                played_seconds: 13_932,
+            }),
             &Ctx {
                 rehearsal: true,
                 ..ctx()
@@ -529,7 +542,9 @@ mod tests {
                 limit_seconds: 3600,
                 viewer: None,
             }),
-            notice(Detail::Exhausted),
+            notice(Detail::Exhausted {
+                played_seconds: 13_932,
+            }),
         ] {
             let m = render(
                 &n,
@@ -557,7 +572,12 @@ mod tests {
 
     #[test]
     fn hostile_names_cannot_ping_or_format() {
-        let m = render(&notice(Detail::Exhausted), &ctx());
+        let m = render(
+            &notice(Detail::Exhausted {
+                played_seconds: 13_932,
+            }),
+            &ctx(),
+        );
         assert!(
             title(&m).contains("Ral\\*bat\\_ @\u{200b}everyone \\[x\\]\\(y\\)"),
             "{}",
@@ -582,7 +602,13 @@ mod tests {
         bare.channels.clear();
         bare.avatar_url = None;
         bare.area = None;
-        let n = Notice::new(Some(bare), Detail::Exhausted, now());
+        let n = Notice::new(
+            Some(bare),
+            Detail::Exhausted {
+                played_seconds: 13_932,
+            },
+            now(),
+        );
         let m = render(
             &n,
             &Ctx {

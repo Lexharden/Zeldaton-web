@@ -12,15 +12,18 @@ import { formatLocalTime } from '@/utils/time'
 const props = withDefaults(defineProps<{ limit?: number }>(), { limit: 8 })
 const hive = useHiveShockStore()
 const items = computed(() => hive.activity.slice(0, props.limit))
+/** Entries whose subject is how long the racer played that day (a duration, not a catalog id). */
+const PLAYED_CODES = new Set(['SESSION_EXHAUSTED', 'GAME_CLOSED'])
 function describe(a: ActivityItem): string {
-  const key = `activity.${a.code}`
+  const withPlayed = PLAYED_CODES.has(a.code) && !!a.subject
+  const key = `activity.${a.code}${withPlayed ? '_PLAYED' : ''}`
   const text = t(key, { racer: a.racerName ?? '', subject: subjectLabel(a) })
   return text === key ? a.message : text
 }
 function subjectLabel(a: ActivityItem): string {
   if (!a.subject) return ''
-  // Donation time: the subject is already a duration ("00:01:30").
-  if (a.kind === 'time') return a.subject
+  // Donation time and "played" entries: the subject is already a duration ("00:01:30").
+  if (a.kind === 'time' || PLAYED_CODES.has(a.code)) return a.subject
   const ns = a.code === 'ITEM_ACQUIRED' ? 'items' : a.code === 'BOSS_DEFEATED' ? 'bosses' : 'areas'
   return tx(ns, a.subject)
 }

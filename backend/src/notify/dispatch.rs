@@ -386,8 +386,13 @@ mod tests {
         no_boss.kinds.insert("boss".into(), false);
         assert!(p.admit(&boss, &no_boss, LIVE, t(0)).is_err());
         assert!(
-            p.admit(&notice("ana", Detail::Exhausted), &no_boss, LIVE, t(0))
-                .is_ok()
+            p.admit(
+                &notice("ana", Detail::Exhausted { played_seconds: 0 }),
+                &no_boss,
+                LIVE,
+                t(0)
+            )
+            .is_ok()
         );
         // A channel without a webhook never sends.
         assert!(

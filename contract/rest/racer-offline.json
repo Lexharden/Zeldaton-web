@@ -5,6 +5,8 @@
   "elapsedSeconds": 0,
   "id": "insomnia",
   "items": {},
+  "playedSeconds": 0,
+  "playedTodaySeconds": 0,
   "progressPercentage": 0.0,
   "remainingSeconds": 14400,
   "slug": "insomnia",

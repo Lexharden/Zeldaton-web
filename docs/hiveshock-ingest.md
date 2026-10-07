@@ -47,13 +47,18 @@ Area ids are free-form; ids the website knows (e.g. `water-temple`) are translat
 
 ### Time from donations (`TIME_DONATION`)
 
-The **streamer** decides in HiveShock how many seconds each TikTok diamond or Twitch bit is worth and whether
-donations add or remove time; HiveShock converts and sends the result. The **organizer** sets the limits in
+HiveShock says **whether** a donation adds or removes time (the sign of `deltaSeconds`) and reports what was paid
+(`source.amount`: the whole donation, a TikTok combo once). **How many seconds** it is worth is, by default, decided by
+the server from the organizer's rate (`secondsPerDiamond`, default 3; `secondsPerBit`, default none), so every racer
+is worth the same whatever their HiveShock is configured with: `requestedSeconds = sign × amount × rate`. The
+magnitude HiveShock sends is then ignored (it is kept in the ledger as "HiveShock pidió" to spot a wrong setup). With
+no rate for a currency the number HiveShock sends is used as it is. The **organizer** sets the rates and the limits in
 `/admin → Evento → Tiempo por donaciones` (`donationTime` in `GET /api/event`):
 
 | Field | Meaning (seconds) |
 | --- | --- |
 | `enabled`, `allowAdd`, `allowRemove` | Off, or a direction not allowed → `ERROR not_allowed` |
+| `secondsPerDiamond`, `secondsPerBit` | Seconds one TikTok diamond / Twitch bit is worth (1–3600), or `null` to use HiveShock's number |
 | `maxSecondsPerDonation` | One donation never changes more than this |
 | `maxAddedSecondsPerDay` / `maxRemovedSecondsPerDay` | Per racer and day; reset with the daily budget |
 

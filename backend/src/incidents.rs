@@ -86,11 +86,14 @@ pub fn describe(n: &Notice, t: &Thresholds) -> Option<Draft> {
             ),
             payload: json!({ "adding": adding, "limitSeconds": limit_seconds, "viewer": viewer }),
         },
-        Detail::Exhausted => Draft {
+        Detail::Exhausted { played_seconds } => Draft {
             kind: "exhausted",
             severity: "info",
-            message: format!("{name} se quedó sin tiempo por hoy."),
-            payload: json!({}),
+            message: format!(
+                "{name} se quedó sin tiempo por hoy (jugó {}).",
+                hms(*played_seconds)
+            ),
+            payload: json!({ "playedSeconds": played_seconds }),
         },
         _ => return None,
     };

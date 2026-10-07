@@ -38,6 +38,9 @@ export interface Racer {
   status: RacerStatus
 
   elapsedSeconds: number
+  /** Time really played (the game running) today and in total; donations and adjustments do not change it. */
+  playedTodaySeconds?: number
+  playedSeconds?: number
   remainingSeconds: number
 
   progressPercentage: number

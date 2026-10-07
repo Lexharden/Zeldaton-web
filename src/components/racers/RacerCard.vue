@@ -108,8 +108,8 @@ const dim = computed(() => status.value === 'offline')
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <p class="hud-label text-[10px]">{{ t('racers.used') }}</p>
-            <ClockDisplay :seconds="clock.usedSeconds.value" size="sm" tone="muted" />
+            <p class="hud-label text-[10px]">{{ t('racers.played') }}</p>
+            <ClockDisplay :seconds="clock.playedTodaySeconds.value" size="sm" tone="muted" />
           </div>
           <div>
             <p class="hud-label text-[10px]">{{ t('racers.left') }}</p>

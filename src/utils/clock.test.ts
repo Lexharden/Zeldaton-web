@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeRemainingMs, computeServerOffsetMs, trackClock } from './clock'
+import { computePlayedMs, computeRemainingMs, computeServerOffsetMs, trackClock } from './clock'
 import { setLocale } from '@/i18n'
 import { eventHeadline, trackPosition } from './status'
 
@@ -27,6 +27,27 @@ describe('clock interpolation', () => {
     expect(computeServerOffsetMs('2026-01-01T00:00:05Z', Date.parse('2026-01-01T00:00:00Z'))).toBe(
       5000,
     )
+  })
+})
+
+describe('played time interpolation', () => {
+  const clock = (status: 'live' | 'paused', extra = {}) =>
+    trackClock({ ...base, status, playedTodayMs: 60_000, playedTotalMs: 600_000, ...extra }, 1000)
+
+  it('grows only while the game runs', () => {
+    expect(computePlayedMs(clock('live'), 'today', 4000)).toBe(63_000)
+    expect(computePlayedMs(clock('live'), 'total', 4000)).toBe(603_000)
+    expect(computePlayedMs(clock('paused'), 'today', 4000)).toBe(60_000)
+  })
+
+  it('never grows past what was left on the clock', () => {
+    expect(computePlayedMs(clock('live', { remainingMs: 2000 }), 'today', 61_000)).toBe(62_000)
+  })
+
+  it('is zero from an older backend that sends none', () => {
+    const old = trackClock({ ...base, status: 'live' }, 1000)
+    expect(computePlayedMs(old, 'today', 4000)).toBe(3000) // only the interpolated stretch
+    expect(computePlayedMs(trackClock({ ...base, status: 'paused' }, 1000), 'total', 9000)).toBe(0)
   })
 })
 

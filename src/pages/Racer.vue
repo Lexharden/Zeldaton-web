@@ -50,10 +50,16 @@ const facts = computed(() => {
       seconds: clock.remainingSeconds.value,
     },
     {
-      id: 'used',
-      label: t('racerPage.used'),
+      id: 'played',
+      label: t('racerPage.playedToday'),
       kind: 'clock' as const,
-      seconds: clock.usedSeconds.value,
+      seconds: clock.playedTodaySeconds.value,
+    },
+    {
+      id: 'playedTotal',
+      label: t('racerPage.playedTotal'),
+      kind: 'clock' as const,
+      seconds: clock.playedTotalSeconds.value,
     },
     {
       id: 'timezone',

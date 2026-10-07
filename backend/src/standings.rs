@@ -69,6 +69,8 @@ mod tests {
             timezone: "UTC".into(),
             status: RacerStatus::Live,
             elapsed_seconds: 100,
+            played_today_seconds: 0,
+            played_seconds: 0,
             remaining_seconds: 100,
             progress_percentage: pct,
             current_area: None,

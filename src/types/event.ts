@@ -40,4 +40,10 @@ export interface DonationTimePolicy {
   /** Per racer and day; resets with the daily budget. */
   maxAddedSecondsPerDay: number
   maxRemovedSecondsPerDay: number
+  /**
+   * Seconds one TikTok diamond / Twitch bit is worth. When set the server computes the time of a
+   * donation (amount x this) and HiveShock only picks the direction; `null` = HiveShock's number.
+   */
+  secondsPerDiamond?: number | null
+  secondsPerBit?: number | null
 }

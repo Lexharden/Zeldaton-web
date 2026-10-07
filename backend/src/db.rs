@@ -41,6 +41,7 @@ pub struct RacerStateRow {
     pub checkpoint_at: DateTime<Utc>,
     pub reset_at: DateTime<Utc>,
     pub played_ms_total: i64,
+    pub played_today_ms: i64,
     pub progress_pct: f64,
     pub current_area: Option<String>,
     pub current_objective: Option<String>,
@@ -68,6 +69,8 @@ pub struct TimeDonationRow {
     pub gift_count: Option<i64>,
     pub viewer: Option<String>,
     pub requested_ms: i64,
+    /// What HiveShock asked for (differs from `requested_ms` when the server applies its own rate).
+    pub reported_ms: Option<i64>,
     pub applied_ms: i64,
     pub limited_by: Option<String>,
 }
@@ -154,10 +157,10 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
         }
         PersistOp::RacerState(r) => {
             sqlx::query(
-                "INSERT INTO racer_state (racer_id,status,remaining_ms,checkpoint_at,reset_at,played_ms_total,progress_pct,current_area,current_objective,completed_objectives,items,stats,finished_at,final_time_seconds,last_heartbeat_at,stream_live,viewers,thumbnail_url,donation_added_ms,donation_removed_ms)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                "INSERT INTO racer_state (racer_id,status,remaining_ms,checkpoint_at,reset_at,played_ms_total,played_today_ms,progress_pct,current_area,current_objective,completed_objectives,items,stats,finished_at,final_time_seconds,last_heartbeat_at,stream_live,viewers,thumbnail_url,donation_added_ms,donation_removed_ms)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(racer_id) DO UPDATE SET status=excluded.status, remaining_ms=excluded.remaining_ms, checkpoint_at=excluded.checkpoint_at,
-                   reset_at=excluded.reset_at, played_ms_total=excluded.played_ms_total, progress_pct=excluded.progress_pct,
+                   reset_at=excluded.reset_at, played_ms_total=excluded.played_ms_total, played_today_ms=excluded.played_today_ms, progress_pct=excluded.progress_pct,
                    current_area=excluded.current_area, current_objective=excluded.current_objective,
                    completed_objectives=excluded.completed_objectives, items=excluded.items, stats=excluded.stats,
                    finished_at=excluded.finished_at, final_time_seconds=excluded.final_time_seconds,
@@ -171,6 +174,7 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .bind(rfc(r.checkpoint_at))
             .bind(rfc(r.reset_at))
             .bind(r.played_ms_total)
+            .bind(r.played_today_ms)
             .bind(r.progress_pct)
             .bind(&r.current_area)
             .bind(&r.current_objective)
@@ -322,8 +326,8 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
         PersistOp::TimeDonation(d) => {
             // OR IGNORE: the unique (racer_id, client_id) already guarantees one row per donation.
             sqlx::query(
-                "INSERT OR IGNORE INTO time_donations (ts,racer_id,client_id,platform,currency,amount,gift,gift_count,viewer,requested_ms,applied_ms,limited_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR IGNORE INTO time_donations (ts,racer_id,client_id,platform,currency,amount,gift,gift_count,viewer,requested_ms,reported_ms,applied_ms,limited_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             )
             .bind(rfc(d.ts))
             .bind(&d.racer_id)
@@ -335,6 +339,7 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .bind(d.gift_count)
             .bind(&d.viewer)
             .bind(d.requested_ms)
+            .bind(d.reported_ms)
             .bind(d.applied_ms)
             .bind(&d.limited_by)
             .execute(pool)
@@ -494,7 +499,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
 
     let mut racers = Vec::new();
     let rows = sqlx::query(
-        "SELECT r.*, s.status, s.remaining_ms, s.checkpoint_at, s.reset_at, s.played_ms_total, s.progress_pct,
+        "SELECT r.*, s.status, s.remaining_ms, s.checkpoint_at, s.reset_at, s.played_ms_total, s.played_today_ms, s.progress_pct,
                 s.current_area, s.current_objective, s.completed_objectives, s.items, s.stats, s.finished_at,
                 s.final_time_seconds, s.last_heartbeat_at, s.stream_live, s.viewers, s.thumbnail_url,
                 s.donation_added_ms, s.donation_removed_ms
@@ -517,6 +522,8 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
             timezone,
             status: RacerStatus::parse(&r.get::<String, _>("status")),
             elapsed_seconds: 0,
+            played_today_seconds: 0,
+            played_seconds: 0,
             remaining_seconds: 0,
             progress_percentage: r.get("progress_pct"),
             current_area: r.get("current_area"),
@@ -544,6 +551,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
             },
             reset_at: parse_dt(&r.get::<String, _>("reset_at")),
             played_ms_total: r.get("played_ms_total"),
+            played_today_ms: r.get("played_today_ms"),
             last_heartbeat: r
                 .get::<Option<String>, _>("last_heartbeat_at")
                 .map(|s| parse_dt(&s)),
@@ -661,6 +669,7 @@ pub async fn donations_tail(
                 "giftCount": r.get::<Option<i64>, _>("gift_count"),
                 "viewer": r.get::<Option<String>, _>("viewer"),
                 "requestedSeconds": r.get::<i64, _>("requested_ms") / 1000,
+                "reportedSeconds": r.get::<Option<i64>, _>("reported_ms").map(|ms| ms / 1000),
                 "appliedSeconds": r.get::<i64, _>("applied_ms") / 1000,
                 "limitedBy": r.get::<Option<String>, _>("limited_by"),
             })

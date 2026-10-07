@@ -189,7 +189,10 @@ pub enum Detail {
         place: u32,
         final_seconds: Option<i64>,
     },
-    Exhausted,
+    /// `played_seconds`: what they really played that day.
+    Exhausted {
+        played_seconds: i64,
+    },
     Boss {
         boss: String,
         count: Option<i64>,
@@ -234,7 +237,7 @@ impl Detail {
         match self {
             Detail::Live => Kind::Live,
             Detail::Winner { .. } => Kind::Winner,
-            Detail::Exhausted => Kind::Exhausted,
+            Detail::Exhausted { .. } => Kind::Exhausted,
             Detail::Boss { .. } => Kind::Boss,
             Detail::Leader { .. } => Kind::Leader,
             Detail::Disconnected { .. } => Kind::Disconnected,

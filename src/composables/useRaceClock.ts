@@ -3,7 +3,7 @@ import { runtime } from '@/config/runtime'
 import { getTransport } from '@/services/websocket'
 import { useEventStore } from '@/stores/event'
 import { useRacersStore } from '@/stores/racers'
-import { computeRemainingMs } from '@/utils/clock'
+import { computePlayedMs, computeRemainingMs } from '@/utils/clock'
 import { useNow } from './useNow'
 
 /**
@@ -28,6 +28,20 @@ export function useRaceClock(racerId: MaybeRefOrGetter<string>) {
   const usedSeconds = computed(() =>
     Math.max(0, event.budgetSeconds - Math.ceil(remainingMs.value / 1000)),
   )
+  // Time really played. An older backend sends none: fall back to "used" (daily budget minus left).
+  const hasPlayed = computed(() => clock.value?.playedTodayMs !== undefined)
+  const playedTodaySeconds = computed(() =>
+    !clock.value
+      ? 0
+      : hasPlayed.value
+        ? Math.floor(computePlayedMs(clock.value, 'today', monotonic.value) / 1000)
+        : usedSeconds.value,
+  )
+  const playedTotalSeconds = computed(() =>
+    clock.value && hasPlayed.value
+      ? Math.floor(computePlayedMs(clock.value, 'total', monotonic.value) / 1000)
+      : playedTodaySeconds.value,
+  )
   const isExpired = computed(
     () =>
       status.value === 'exhausted' ||
@@ -44,6 +58,8 @@ export function useRaceClock(racerId: MaybeRefOrGetter<string>) {
     remainingMs,
     remainingSeconds,
     usedSeconds,
+    playedTodaySeconds,
+    playedTotalSeconds,
     usedRatio,
     isExpired,
   }

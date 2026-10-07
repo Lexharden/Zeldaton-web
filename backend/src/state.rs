@@ -35,6 +35,8 @@ pub struct RacerRuntime {
     pub reset_at: DateTime<Utc>,
     /// Total time actually played across all days; becomes `finalTimeSeconds`.
     pub played_ms_total: i64,
+    /// Time actually played since this racer's last daily reset.
+    pub played_today_ms: i64,
     pub last_heartbeat: Option<DateTime<Utc>>,
     pub ingest: Option<IngestHandle>,
     /// Recent client event ids, for idempotent retries.

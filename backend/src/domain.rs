@@ -155,6 +155,12 @@ pub struct DonationTimePolicy {
     pub max_added_seconds_per_day: i64,
     /// Most time donations can remove from one racer per day (seconds).
     pub max_removed_seconds_per_day: i64,
+    /// Seconds one TikTok diamond is worth. When set, **the server** computes the time of a
+    /// diamond donation (`amount` x this), keeping only the direction (add or remove) that HiveShock
+    /// sent, so every racer has the same rate whatever their HiveShock says. `None`: HiveShock's number.
+    pub seconds_per_diamond: Option<i64>,
+    /// The same for Twitch bits.
+    pub seconds_per_bit: Option<i64>,
 }
 
 impl Default for DonationTimePolicy {
@@ -166,6 +172,8 @@ impl Default for DonationTimePolicy {
             max_seconds_per_donation: 3600,
             max_added_seconds_per_day: 4 * 3600,
             max_removed_seconds_per_day: 4 * 3600,
+            seconds_per_diamond: Some(3),
+            seconds_per_bit: None,
         }
     }
 }
@@ -177,6 +185,14 @@ impl DonationTimePolicy {
     pub fn validate(&self) -> Result<(), String> {
         if !(1..=Self::MAX_SECONDS).contains(&self.max_seconds_per_donation) {
             return Err("maxSecondsPerDonation must be between 1 and 172800".into());
+        }
+        for (name, rate) in [
+            ("secondsPerDiamond", self.seconds_per_diamond),
+            ("secondsPerBit", self.seconds_per_bit),
+        ] {
+            if rate.is_some_and(|r| !(1..=3600).contains(&r)) {
+                return Err(format!("{name} must be between 1 and 3600"));
+            }
         }
         for (name, v) in [
             ("maxAddedSecondsPerDay", self.max_added_seconds_per_day),
@@ -290,6 +306,13 @@ pub struct Racer {
     pub timezone: String,
     pub status: RacerStatus,
     pub elapsed_seconds: i64,
+    /// Time really played (the game running), since the last daily reset and over the whole event.
+    /// Unlike `elapsed_seconds` (the daily budget minus what is left) donations and organizer
+    /// adjustments do not change it.
+    #[serde(default)]
+    pub played_today_seconds: i64,
+    #[serde(default)]
+    pub played_seconds: i64,
     pub remaining_seconds: i64,
     pub progress_percentage: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -325,6 +348,12 @@ pub struct ClockState {
     pub remaining_ms: i64,
     pub status: RacerStatus,
     pub reset_at_utc: String,
+    /// Time really played today / in total, as of `server_time_utc` (it keeps growing while the
+    /// clock runs, like `remaining_ms` keeps shrinking).
+    #[serde(default)]
+    pub played_today_ms: i64,
+    #[serde(default)]
+    pub played_total_ms: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

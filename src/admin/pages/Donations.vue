@@ -290,7 +290,20 @@ const LIMITS: Record<string, string> = {
                   </span>
                 </td>
                 <td class="text-xs text-secondary">{{ d.viewer ?? '—' }}</td>
-                <td class="num text-muted">{{ signed(d.requestedSeconds) }}</td>
+                <td class="num text-muted">
+                  {{ signed(d.requestedSeconds) }}
+                  <div
+                    v-if="
+                      d.reportedSeconds !== null &&
+                      d.reportedSeconds !== undefined &&
+                      d.reportedSeconds !== d.requestedSeconds
+                    "
+                    class="text-[10px] text-warning"
+                    title="Lo que pidió HiveShock del corredor; el servidor aplicó su propia tarifa."
+                  >
+                    HiveShock pidió {{ signed(d.reportedSeconds) }}
+                  </div>
+                </td>
                 <td
                   class="num font-semibold"
                   :class="

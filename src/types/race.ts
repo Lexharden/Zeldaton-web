@@ -12,6 +12,9 @@ export interface ClockState {
   remainingMs: number
   status: RacerStatus
   resetAtUtc: string
+  /** Time really played today / in total as of `serverTimeUtc` (absent on older backends). */
+  playedTodayMs?: number
+  playedTotalMs?: number
 }
 
 export interface StreamInfo extends RacerStream {

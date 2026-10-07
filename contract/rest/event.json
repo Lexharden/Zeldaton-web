@@ -7,7 +7,9 @@
     "enabled": true,
     "maxAddedSecondsPerDay": 14400,
     "maxRemovedSecondsPerDay": 14400,
-    "maxSecondsPerDonation": 3600
+    "maxSecondsPerDonation": 3600,
+    "secondsPerBit": null,
+    "secondsPerDiamond": 3
   },
   "edition": "2026",
   "game": "Ocarina of Time",

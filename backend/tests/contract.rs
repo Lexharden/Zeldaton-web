@@ -45,6 +45,8 @@ fn clock(status: RacerStatus, remaining_ms: i64) -> ClockState {
         remaining_ms,
         status,
         reset_at_utc: "2026-10-08T12:00:00.000Z".into(),
+        played_today_ms: 2_460_000,
+        played_total_ms: 10_860_000,
     }
 }
 

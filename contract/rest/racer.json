@@ -23,6 +23,8 @@
   "items": {
     "longshot": true
   },
+  "playedSeconds": 60,
+  "playedTodaySeconds": 60,
   "progressPercentage": 76.0,
   "remainingSeconds": 14340,
   "slug": "ralbat",

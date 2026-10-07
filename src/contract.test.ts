@@ -67,7 +67,15 @@ describe('websocket fixtures', () => {
   it('carries clock fields the clock client depends on', () => {
     const snap = read<{ clocks: Record<string, unknown>[] }>('ws/CLOCK_SNAPSHOT.json')
     for (const c of snap.clocks) {
-      expectKeys(c, ['racerId', 'serverTimeUtc', 'remainingMs', 'status', 'resetAtUtc'])
+      expectKeys(c, [
+        'racerId',
+        'serverTimeUtc',
+        'remainingMs',
+        'status',
+        'resetAtUtc',
+        'playedTodayMs',
+        'playedTotalMs',
+      ])
       expect(RACER_STATUSES).toContain(c.status)
     }
   })

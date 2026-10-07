@@ -470,7 +470,12 @@ fn rotating_the_token_clears_a_broadcast_reported_by_the_dropped_hiveshock() {
 
     // The old session closing afterwards changes nothing.
     s.detach_ingest("ralbat", 1);
-    assert!(!s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap().is_live);
+    assert!(
+        !s.view(s.idx("ralbat").unwrap(), t0())
+            .stream
+            .unwrap()
+            .is_live
+    );
 }
 
 #[test]
@@ -481,7 +486,13 @@ fn a_lost_heartbeat_and_a_restart_both_clear_a_reported_broadcast() {
         "ralbat",
         zeldathon_server::state::IngestHandle { conn_id: 1, tx },
     );
-    ingest(&mut s, "ralbat", IngestMsg::Heartbeat { game_running: None }, t0()).unwrap();
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::Heartbeat { game_running: None },
+        t0(),
+    )
+    .unwrap();
     ingest(
         &mut s,
         "ralbat",
@@ -505,7 +516,10 @@ fn a_lost_heartbeat_and_a_restart_both_clear_a_reported_broadcast() {
     let mut s = state(t0());
     let i = s.idx("ralbat").unwrap();
     {
-        let stream = s.racers[i].racer.stream.get_or_insert_with(Default::default);
+        let stream = s.racers[i]
+            .racer
+            .stream
+            .get_or_insert_with(Default::default);
         stream.is_live = true;
         stream.viewers = Some(5);
     }
@@ -799,20 +813,27 @@ fn donations_add_and_remove_time_and_are_recorded() {
     );
     assert_eq!(feed.detail.as_deref(), Some("+00:01:30 · 150 BITS"));
 
-    let (_, reply) = donate(&mut s, "ralbat", "d2", -30, diamonds("Rose", 5, 5), t0()).unwrap();
-    assert_eq!(applied(&reply).applied_seconds, -30);
+    // Diamonds use the organizer's rate (3 s each): 5 diamonds = 15 s, whatever HiveShock said.
+    let (fx, reply) = donate(&mut s, "ralbat", "d2", -30, diamonds("Rose", 5, 5), t0()).unwrap();
+    assert_eq!(applied(&reply).applied_seconds, -15);
+    assert_eq!(applied(&reply).requested_seconds, -15);
+    let row = ledger(&fx)[0];
+    assert_eq!(
+        (row.requested_ms, row.reported_ms),
+        (-15_000, Some(-30_000))
+    );
     assert_eq!(s.activity[0].code, "TIME_REMOVED");
     assert_eq!(
         s.activity[0].detail.as_deref(),
-        Some("-00:00:30 · ROSE X5 · 5 DIAMONDS")
+        Some("-00:00:15 · ROSE X5 · 5 DIAMONDS")
     );
-    assert_eq!(s.clock(i, t0()).remaining_ms, 14_400_000 + 60_000);
+    assert_eq!(s.clock(i, t0()).remaining_ms, 14_400_000 + 75_000);
     assert_eq!(
         (
             s.racers[i].donation_added_ms,
             s.racers[i].donation_removed_ms
         ),
-        (90_000, 30_000)
+        (90_000, 15_000)
     );
 }
 
@@ -1051,7 +1072,10 @@ fn running_out_of_time_notifies_once_per_day_of_that_racer() {
     let end = t0() + Duration::hours(5); // past the 4 h budget
     let fx = s.tick(end, 20);
     let n = notices(&fx);
-    let exhausted: Vec<_> = n.iter().filter(|n| n.detail == Detail::Exhausted).collect();
+    let exhausted: Vec<_> = n
+        .iter()
+        .filter(|n| matches!(n.detail, Detail::Exhausted { .. }))
+        .collect();
     assert_eq!(exhausted.len(), 1);
     let key = exhausted[0].dedupe.clone().unwrap();
     assert!(key.starts_with("exhausted:ralbat:"), "{key}");
@@ -1140,5 +1164,233 @@ fn hitting_the_daily_donation_cap_notifies_the_referees_once_per_kind_and_day() 
             .as_deref()
             .unwrap()
             .starts_with("cap:ralbat:remove:")
+    );
+}
+
+// ---- the organizer's rate per diamond / bit ------------------------------------------------------
+
+fn with_rates(s: &mut RaceState, diamond: Option<i64>, bit: Option<i64>) {
+    s.update_event(EventPatch {
+        donation_time: Some(DonationTimePolicy {
+            seconds_per_diamond: diamond,
+            seconds_per_bit: bit,
+            ..DonationTimePolicy::default()
+        }),
+        ..Default::default()
+    })
+    .unwrap();
+}
+
+#[test]
+fn by_default_a_diamond_is_worth_three_seconds_and_hiveshock_only_picks_the_direction() {
+    assert_eq!(DonationTimePolicy::default().seconds_per_diamond, Some(3));
+    assert_eq!(DonationTimePolicy::default().seconds_per_bit, None);
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    // The 1-diamond Rose that HiveShock priced at 1 h 28 min is 3 seconds.
+    let (fx, reply) = donate(
+        &mut s,
+        "ralbat",
+        "rose",
+        -5280,
+        diamonds("Rose", 1, 1),
+        t0(),
+    )
+    .unwrap();
+    assert_eq!(applied(&reply).requested_seconds, -3);
+    assert_eq!(applied(&reply).applied_seconds, -3);
+    assert_eq!(applied(&reply).limited_by, None);
+    let row = ledger(&fx)[0];
+    assert_eq!(
+        (row.requested_ms, row.applied_ms, row.reported_ms),
+        (-3_000, -3_000, Some(-5_280_000))
+    );
+    // A big gift scales with its diamonds (then the organizer's per-donation cap applies).
+    let (_, reply) = donate(
+        &mut s,
+        "ralbat",
+        "whale",
+        1,
+        diamonds("Whale diving", 1, 2150),
+        t0(),
+    )
+    .unwrap();
+    let t = applied(&reply);
+    assert_eq!(
+        (t.requested_seconds, t.applied_seconds, t.limited_by),
+        (6450, 3600, Some("per_donation"))
+    );
+    // The direction is the only thing taken from HiveShock.
+    let (_, reply) = donate(
+        &mut s,
+        "ralbat",
+        "up",
+        99_999,
+        diamonds("Heart Me", 1, 10),
+        t0(),
+    )
+    .unwrap();
+    assert_eq!(applied(&reply).requested_seconds, 30);
+    assert_eq!(
+        donate(
+            &mut s,
+            "ralbat",
+            "zero",
+            0,
+            diamonds("Heart Me", 1, 10),
+            t0()
+        )
+        .unwrap_err()
+        .code(),
+        "invalid"
+    );
+}
+
+#[test]
+fn rates_can_be_set_per_currency_or_left_to_hiveshock() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    // Bits at 2 s each, diamonds back to HiveShock's own number.
+    with_rates(&mut s, None, Some(2));
+    let (_, r) = donate(&mut s, "ralbat", "b", 10, bits(50), t0()).unwrap();
+    assert_eq!(applied(&r).requested_seconds, 100);
+    let (_, r) = donate(&mut s, "ralbat", "d", -45, diamonds("Rose", 1, 99), t0()).unwrap();
+    assert_eq!(applied(&r).requested_seconds, -45);
+    // Both off: HiveShock decides everything, as before this feature existed.
+    with_rates(&mut s, None, None);
+    let (_, r) = donate(&mut s, "ralbat", "b2", 77, bits(50), t0()).unwrap();
+    assert_eq!(applied(&r).requested_seconds, 77);
+    assert_eq!(
+        donate(&mut s, "ralbat", "huge", 999_999_999, bits(1), t0())
+            .unwrap_err()
+            .code(),
+        "invalid"
+    );
+}
+
+#[test]
+fn the_rate_is_validated() {
+    for bad in [0, -1, 3601] {
+        let p = DonationTimePolicy {
+            seconds_per_diamond: Some(bad),
+            ..DonationTimePolicy::default()
+        };
+        assert!(p.validate().is_err(), "{bad}");
+        let p = DonationTimePolicy {
+            seconds_per_bit: Some(bad),
+            ..DonationTimePolicy::default()
+        };
+        assert!(p.validate().is_err(), "{bad}");
+    }
+    assert!(
+        DonationTimePolicy {
+            seconds_per_diamond: Some(3600),
+            ..DonationTimePolicy::default()
+        }
+        .validate()
+        .is_ok()
+    );
+    // An older stored policy (without the fields) picks up the defaults.
+    let old: DonationTimePolicy =
+        serde_json::from_str(r#"{"enabled":true,"maxSecondsPerDonation":600}"#).unwrap();
+    assert_eq!(
+        (old.seconds_per_diamond, old.max_seconds_per_donation),
+        (Some(3), 600)
+    );
+    let off: DonationTimePolicy = serde_json::from_str(r#"{"secondsPerDiamond":null}"#).unwrap();
+    assert_eq!(off.seconds_per_diamond, None);
+}
+
+// ---- time really played --------------------------------------------------------------------------
+
+#[test]
+fn played_time_counts_only_the_running_game_and_ignores_donations_and_adjustments() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let i = s.idx("ralbat").unwrap();
+    let at = |secs: i64| t0() + Duration::seconds(secs);
+    // 10 minutes of play; the live view already counts the stretch that is still running.
+    let v = s.view(i, at(600));
+    assert_eq!((v.played_today_seconds, v.played_seconds), (600, 600));
+    let c = s.clock(i, at(600));
+    assert_eq!((c.played_today_ms, c.played_total_ms), (600_000, 600_000));
+    // Donations and organizer adjustments move the clock, never the played time.
+    donate(&mut s, "ralbat", "d", -1, diamonds("Rose", 1, 100), at(600)).unwrap(); // -300 s
+    s.admin_action(
+        "ralbat",
+        AdminAction::AdjustTime {
+            delta_seconds: -900,
+        },
+        at(600),
+    )
+    .unwrap();
+    let v = s.view(i, at(600));
+    assert_eq!(v.played_today_seconds, 600);
+    assert!(
+        v.elapsed_seconds > 600,
+        "elapsed (budget - left) is what they distort"
+    );
+    // Paused time is not played time.
+    ingest(&mut s, "ralbat", IngestMsg::SessionPaused, at(600)).unwrap();
+    assert_eq!(s.view(i, at(5000)).played_today_seconds, 600);
+    ingest(&mut s, "ralbat", IngestMsg::SessionResumed, at(5000)).unwrap();
+    assert_eq!(s.view(i, at(5060)).played_today_seconds, 660);
+}
+
+#[test]
+fn a_daily_reset_starts_a_new_day_of_play_but_keeps_the_total() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let i = s.idx("ralbat").unwrap();
+    let noon = t0() + Duration::seconds(1800);
+    s.admin_action("ralbat", AdminAction::ResetDay, noon)
+        .unwrap();
+    let v = s.view(i, noon);
+    assert_eq!((v.played_today_seconds, v.played_seconds), (0, 1800));
+    let later = noon + Duration::seconds(60);
+    let v = s.view(i, later);
+    assert_eq!((v.played_today_seconds, v.played_seconds), (60, 1860));
+}
+
+#[test]
+fn closing_the_game_or_running_out_of_time_says_how_long_they_played() {
+    // Running out of time: the feed and the notice carry the day's played time.
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let end = t0() + Duration::hours(5);
+    let fx = s.tick(end, 20);
+    let note = s
+        .activity
+        .iter()
+        .find(|a| a.code == "SESSION_EXHAUSTED")
+        .unwrap();
+    assert_eq!(note.subject.as_deref(), Some("04:00:00"));
+    let n = fx
+        .notices
+        .iter()
+        .find(|n| matches!(n.detail, Detail::Exhausted { .. }))
+        .unwrap();
+    assert_eq!(
+        n.detail,
+        Detail::Exhausted {
+            played_seconds: 14_400
+        }
+    );
+
+    // An organizer closing a running game: same, as its own feed entry.
+    let mut s = state(t0());
+    start(&mut s, "xime", t0());
+    let at = t0() + Duration::seconds(95);
+    s.admin_action("xime", AdminAction::ForceClose, at).unwrap();
+    let note = s.activity.iter().find(|a| a.code == "GAME_CLOSED").unwrap();
+    assert_eq!(note.subject.as_deref(), Some("00:01:35"));
+    // Closing a game that is not running says nothing.
+    s.admin_action("xime", AdminAction::ForceClose, at).unwrap();
+    assert_eq!(
+        s.activity
+            .iter()
+            .filter(|a| a.code == "GAME_CLOSED")
+            .count(),
+        1
     );
 }

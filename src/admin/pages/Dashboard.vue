@@ -155,6 +155,12 @@ const levelTone = {
                     text="Tiempo que le queda hoy de su presupuesto diario. Solo corre mientras juega y se reinicia a la hora de reinicio del evento, en su zona horaria."
                   />
                 </th>
+                <th>
+                  Jugado hoy
+                  <InfoTip
+                    text="Tiempo que realmente ha jugado hoy (solo cuenta con el juego corriendo). A diferencia de «Tiempo hoy», las donaciones y los ajustes de tiempo no lo cambian: sirve para ver cuánto jugó antes de que se le cerrara el juego o se le acabara el tiempo."
+                  />
+                </th>
                 <th class="min-w-40">
                   Progreso
                   <InfoTip text="Avance total del juego que reporta HiveShock, de 0 a 100 %." />
@@ -198,6 +204,13 @@ const levelTone = {
                 <td class="num font-semibold text-white">
                   {{
                     hms(overview.remainingNow(row.racer.status, row.racer.remainingSeconds, now))
+                  }}
+                </td>
+                <td class="num text-secondary">
+                  {{
+                    hms(
+                      overview.playedNow(row.racer.status, row.racer.playedTodaySeconds ?? 0, now),
+                    )
                   }}
                 </td>
                 <td>

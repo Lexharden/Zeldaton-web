@@ -338,7 +338,25 @@ impl RaceState {
         let rem_ms = r.checkpoint.remaining(r.racer.status.is_running(), now);
         out.remaining_seconds = (rem_ms + 999) / 1000;
         out.elapsed_seconds = (self.event.daily_budget_seconds - out.remaining_seconds).max(0);
+        let (today, total) = self.played_ms(i, now);
+        out.played_today_seconds = today / 1000;
+        out.played_seconds = total / 1000;
         out
+    }
+
+    /// (today, total) milliseconds really played, counting the running stretch since the last
+    /// checkpoint (capped by what was left on the clock, like `freeze`).
+    fn played_ms(&self, i: usize, now: DateTime<Utc>) -> (i64, i64) {
+        let r = &self.racers[i];
+        let running = if r.racer.status.is_running() {
+            (now - r.checkpoint.at)
+                .num_milliseconds()
+                .max(0)
+                .min(r.checkpoint.remaining_ms.max(0))
+        } else {
+            0
+        };
+        (r.played_today_ms + running, r.played_ms_total + running)
     }
 
     pub fn views(&self, now: DateTime<Utc>) -> Vec<Racer> {
@@ -347,12 +365,15 @@ impl RaceState {
 
     pub fn clock(&self, i: usize, now: DateTime<Utc>) -> ClockState {
         let r = &self.racers[i];
+        let (today, total) = self.played_ms(i, now);
         ClockState {
             racer_id: r.racer.id.clone(),
             server_time_utc: iso(now),
             remaining_ms: r.checkpoint.remaining(r.racer.status.is_running(), now),
             status: r.racer.status,
             reset_at_utc: iso(r.reset_at),
+            played_today_ms: today,
+            played_total_ms: total,
         }
     }
 
@@ -369,6 +390,7 @@ impl RaceState {
             checkpoint_at: r.checkpoint.at,
             reset_at: r.reset_at,
             played_ms_total: r.played_ms_total,
+            played_today_ms: r.played_today_ms,
             progress_pct: r.racer.progress_percentage,
             current_area: r.racer.current_area.clone(),
             current_objective: r.racer.current_objective.clone(),
@@ -410,6 +432,7 @@ impl RaceState {
             let elapsed = (now - r.checkpoint.at).num_milliseconds().max(0);
             let used = elapsed.min(r.checkpoint.remaining_ms.max(0));
             r.played_ms_total += used;
+            r.played_today_ms += used;
             r.checkpoint.remaining_ms = (r.checkpoint.remaining_ms - used).max(0);
         }
         r.checkpoint.at = now;
@@ -841,16 +864,34 @@ impl RaceState {
         if self.racers[i].donation_ids.contains(client_id) {
             return Ok(Reply::Ack);
         }
-        if delta_seconds == 0 || delta_seconds.abs() > DonationTimePolicy::MAX_SECONDS {
+        let source = source.sanitized()?;
+        let policy = self.event.donation_time.clone();
+        // With the organizer's rate the server decides the amount; HiveShock only says the direction.
+        let rate = match source.currency {
+            DonationCurrency::Diamonds => policy.seconds_per_diamond,
+            DonationCurrency::Bits => policy.seconds_per_bit,
+        };
+        if delta_seconds == 0
+            || (rate.is_none() && delta_seconds.abs() > DonationTimePolicy::MAX_SECONDS)
+        {
             return Err(IngestError::Invalid(
                 "deltaSeconds must be non-zero and at most 172800 either way".into(),
             ));
         }
-        let source = source.sanitized()?;
+        let reported_seconds = delta_seconds;
+        let delta_seconds = match rate {
+            Some(per_unit) => {
+                delta_seconds.signum()
+                    * source
+                        .amount
+                        .saturating_mul(per_unit)
+                        .min(DonationTimePolicy::MAX_SECONDS)
+            }
+            None => delta_seconds,
+        };
         if self.racers[i].racer.status == RacerStatus::Finished {
             return Err(IngestError::OutOfSequence("racer already finished"));
         }
-        let policy = self.event.donation_time.clone();
         let adding = delta_seconds > 0;
         if !policy.enabled {
             return Err(IngestError::NotAllowed(
@@ -921,6 +962,7 @@ impl RaceState {
                 gift_count: source.gift_count,
                 viewer: source.viewer.clone(),
                 requested_ms: delta_seconds * 1000,
+                reported_ms: Some(reported_seconds * 1000),
                 applied_ms: applied,
                 limited_by: limited_by.map(str::to_string),
             })));
@@ -1137,6 +1179,7 @@ impl RaceState {
                 at: now,
             };
             r.reset_at = next;
+            r.played_today_ms = 0;
             r.donation_added_ms = 0;
             r.donation_removed_ms = 0;
         }
@@ -1185,9 +1228,16 @@ impl RaceState {
         fx.down.push((id.clone(), IngestDown::ForceClose));
         // Once per day of this racer (their reset time identifies the day).
         let day = iso(self.racers[i].reset_at);
+        let played_today = self.racers[i].played_today_ms / 1000;
         fx.notices.push(
-            Notice::new(Some(LiveInfo::from_state(self, i)), Detail::Exhausted, now)
-                .keyed(format!("exhausted:{id}:{day}")),
+            Notice::new(
+                Some(LiveInfo::from_state(self, i)),
+                Detail::Exhausted {
+                    played_seconds: played_today,
+                },
+                now,
+            )
+            .keyed(format!("exhausted:{id}:{day}")),
         );
         self.note(
             fx,
@@ -1197,7 +1247,8 @@ impl RaceState {
             "SESSION_EXHAUSTED",
             format!("{name} ran out of time"),
             None,
-            None,
+            // How long they really played that day, so the feed tells the whole story.
+            Some(format_hms(played_today)),
         );
     }
 
@@ -1323,7 +1374,20 @@ impl RaceState {
                 });
                 fx.down.push((id.into(), IngestDown::ForceClose));
                 if matches!(status, RacerStatus::Live | RacerStatus::Paused) {
+                    self.freeze(i, now);
+                    let played_today = self.racers[i].played_today_ms / 1000;
+                    let name = self.racers[i].racer.display_name.clone();
                     self.set_status(i, RacerStatus::Online, now, &mut fx);
+                    self.note(
+                        &mut fx,
+                        now,
+                        ActivityKind::Status,
+                        Some(i),
+                        "GAME_CLOSED",
+                        format!("{name}'s game was closed by an organizer"),
+                        None,
+                        Some(format_hms(played_today)),
+                    );
                 }
             }
             AdminAction::ResetDay => {
@@ -1568,6 +1632,7 @@ impl RaceState {
             };
             r.reset_at = next_reset;
             r.played_ms_total = 0;
+            r.played_today_ms = 0;
             r.seen_ids.clear();
             r.donation_added_ms = 0;
             r.donation_removed_ms = 0;
@@ -1621,6 +1686,8 @@ impl RaceState {
             timezone: n.timezone,
             status: RacerStatus::Offline,
             elapsed_seconds: 0,
+            played_today_seconds: 0,
+            played_seconds: 0,
             remaining_seconds: self.event.daily_budget_seconds,
             progress_percentage: 0.0,
             current_area: None,
@@ -1643,6 +1710,7 @@ impl RaceState {
             },
             reset_at: next_reset_utc(now, tz, self.reset_time()),
             played_ms_total: 0,
+            played_today_ms: 0,
             last_heartbeat: None,
             ingest: None,
             seen_ids: VecDeque::new(),

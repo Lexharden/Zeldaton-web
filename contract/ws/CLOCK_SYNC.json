@@ -1,5 +1,7 @@
 {
   "clock": {
+    "playedTodayMs": 2460000,
+    "playedTotalMs": 10860000,
     "racerId": "ralbat",
     "remainingMs": 9000000,
     "resetAtUtc": "2026-10-08T12:00:00.000Z",

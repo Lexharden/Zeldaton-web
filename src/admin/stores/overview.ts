@@ -59,5 +59,11 @@ export const useOverviewStore = defineStore('overview', () => {
     return Math.max(0, remainingSeconds - Math.floor((now - receivedAt.value) / 1000))
   }
 
-  return { data, error, receivedAt, refresh, start, stop, remainingNow }
+  /** Seconds really played today: grows locally while the game runs, until the next poll. */
+  function playedNow(status: string, playedSeconds: number, now: number): number {
+    if (status !== 'live') return playedSeconds
+    return playedSeconds + Math.max(0, Math.floor((now - receivedAt.value) / 1000))
+  }
+
+  return { data, error, receivedAt, refresh, start, stop, remainingNow, playedNow }
 })

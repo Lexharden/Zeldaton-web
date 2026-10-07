@@ -1659,7 +1659,7 @@ async fn the_public_donors_board_shows_only_what_is_meant_and_the_organizer_cont
         }
     }
     assert_eq!(board["totals"]["donations"], 4);
-    assert_eq!(board["totals"]["addedSeconds"], 780);
+    assert_eq!(board["totals"]["addedSeconds"], 810); // Menor: 50 diamonds x 3 s
     assert_eq!(board["totals"]["removedSeconds"], 30);
     let (_, one) = call(&h, "GET", "/api/donors?limit=1", None, None).await;
     assert_eq!(one["donors"].as_array().unwrap().len(), 1);

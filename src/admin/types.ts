@@ -113,6 +113,8 @@ export interface DonationRow {
   giftCount: number | null
   viewer: string | null
   requestedSeconds: number
+  /** What HiveShock asked for; differs from `requestedSeconds` when the server applied its own rate. */
+  reportedSeconds?: number | null
   appliedSeconds: number
   /** Why less than asked was applied: per_donation, daily_limit, clock_max, clock_zero. */
   limitedBy: string | null
