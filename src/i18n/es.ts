@@ -64,7 +64,7 @@ export const es = {
     hoursDay: '{n} HORAS AL DÍA.',
     oneFinish: '1 META.',
     raceTime: 'EL EVENTO YA COMENZÓ',
-    raceTimeHint: 'TIEMPO TRANSCURRIDO DESDE EL INICIO · SUBE, NO BAJA',
+    raceTimeHint: 'TIEMPO TRANSCURRIDO DESDE EL INICIO',
     start: 'INICIO',
     eventComplete: 'EVENTO TERMINADO',
     scroll: 'DESLIZA',

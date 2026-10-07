@@ -65,7 +65,7 @@ export const en: Messages = {
     hoursDay: '{n} HOURS A DAY.',
     oneFinish: '1 FINISH LINE.',
     raceTime: 'THE EVENT HAS STARTED',
-    raceTimeHint: 'TIME ELAPSED SINCE THE START · COUNTS UP, NOT DOWN',
+    raceTimeHint: 'TIME ELAPSED SINCE THE START',
     start: 'START',
     eventComplete: 'EVENT COMPLETE',
     scroll: 'SCROLL',
