@@ -61,3 +61,21 @@ export const P = {
   F5: 698.46,
   G5: 783.99,
 } as const
+
+let sample: HTMLAudioElement | null = null
+
+/**
+ * Plays a short recorded sound once (a new call restarts it instead of stacking). Needs a user
+ * gesture in the browser's eyes: it is called from a key press. Silent if the browser refuses or
+ * cannot decode the format: sound is always a bonus.
+ */
+export function playSample(url: string, volume = 0.9) {
+  try {
+    sample?.pause()
+    sample = new Audio(url)
+    sample.volume = Math.min(1, Math.max(0, volume))
+    void sample.play().catch(() => {})
+  } catch {
+    // Audio is a bonus.
+  }
+}

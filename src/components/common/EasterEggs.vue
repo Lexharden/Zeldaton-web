@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { t } from '@/i18n'
-import { type Note, P, type Wave, playNotes } from '@/utils/ocarina'
+import { type Note, P, type Wave, playNotes, playSample } from '@/utils/ocarina'
 
 /**
  * Hidden surprises for people who know the game. Nothing here is advertised:
@@ -13,6 +13,7 @@ import { type Note, P, type Wave, playNotes } from '@/utils/ocarina'
  *   A ↓ ↑ A ↓ ↑              Song of Storms: rain and lightning
  *   c u c c o                Cuccos everywhere
  *   g a n o n                Ganondorf's darkness and embers
+ *   c l a c o m e            Plays public/sounds/solenacho.ogg while notes float up
  *
  * (Zelda's Lullaby, ← ↑ → ← ↑ →, belongs to Navi: see NaviCursor.vue.)
  * One shared canvas; it only runs while an effect is playing. Keys typed into a form never count,
@@ -48,8 +49,11 @@ interface Effect {
   /** Title shown as a banner. */
   title: () => string
   overlay?: Overlay
-  melody: Note[]
+  /** A synthesized tune (the default way to make sound)... */
+  melody?: Note[]
   wave?: Wave
+  /** ...or a recorded sound served by the site, played instead of the tune. */
+  sound?: string
   /** Called every frame while the effect lasts; spawn particles here. */
   tick: (dt: number, elapsed: number) => void
   /** Called once when it starts. */
@@ -311,6 +315,28 @@ const EFFECTS: Effect[] = [
     },
   },
   {
+    keys: 'clacome',
+    seconds: 6, // the sound lasts about 5.9 s
+    title: () => t('eggs.clacome'),
+    sound: '/sounds/solenacho.ogg',
+    tick(dt) {
+      every(9, dt, () =>
+        add({
+          kind: 'glyph',
+          glyph: ['🔊', '🎵', '🎶'][Math.floor(Math.random() * 3)],
+          x: rand(w * 0.1, w * 0.9),
+          y: h + 20,
+          vx: rand(-30, 30),
+          vy: rand(-220, -110),
+          max: rand(2.5, 4),
+          size: rand(26, 46),
+          hue: -1,
+          vr: rand(-0.6, 0.6),
+        }),
+      )
+    },
+  },
+  {
     keys: 'ganon',
     seconds: 5,
     title: () => t('eggs.ganon'),
@@ -347,7 +373,9 @@ function showBanner(text: string, seconds: number) {
 
 function trigger(effect: Effect) {
   showBanner(effect.title(), Math.min(4, effect.seconds))
-  playNotes(effect.melody, { type: effect.wave, volume: effect.wave ? 0.07 : 0.16 })
+  if (effect.sound) playSample(effect.sound)
+  else if (effect.melody)
+    playNotes(effect.melody, { type: effect.wave, volume: effect.wave ? 0.07 : 0.16 })
   if (reduce) return
   particles.length = 0
   acc = 0

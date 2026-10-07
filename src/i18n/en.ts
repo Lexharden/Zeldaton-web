@@ -587,6 +587,7 @@ export const en: Messages = {
     storms: 'Song of Storms',
     cucco: 'The Cuccos are angry!',
     ganon: 'Ganondorf awakens!',
+    clacome: 'Clácome!',
   },
   timezones: {
     'America/Mexico_City': 'Mexico City',

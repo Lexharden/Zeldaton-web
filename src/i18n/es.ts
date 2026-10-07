@@ -589,6 +589,7 @@ export const es = {
     storms: 'Canción de la Tormenta',
     cucco: '¡Los Cucos se enojaron!',
     ganon: '¡Ganondorf despierta!',
+    clacome: '¡Clácome!',
   },
   timezones: {
     'America/Mexico_City': 'Ciudad de México',
