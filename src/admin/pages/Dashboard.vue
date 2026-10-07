@@ -7,6 +7,7 @@ import LiveBadge from '@/components/common/LiveBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import { ago, hms, localDateTime } from '../format'
 import EventControls from '../components/EventControls.vue'
+import InfoTip from '../components/InfoTip.vue'
 import PageHeader from '../components/PageHeader.vue'
 import RacerControlDialog from '../components/RacerControlDialog.vue'
 import StatCard from '../components/StatCard.vue'
@@ -97,18 +98,37 @@ const levelTone = {
       >
         <StatCard
           label="Conectados"
+          info="Corredores con HiveShock (el programa que reporta el juego) conectado, sobre el total."
           :value="`${summary.connected} / ${summary.racers}`"
           :tone="summary.connected ? 'good' : 'warn'"
         />
-        <StatCard label="En vivo" :value="summary.live" :tone="summary.live ? 'good' : 'default'" />
-        <StatCard label="En pausa" :value="summary.paused" />
-        <StatCard label="En espera" :value="summary.online" />
+        <StatCard
+          label="En vivo"
+          info="Jugando ahora: su reloj del día está corriendo."
+          :value="summary.live"
+          :tone="summary.live ? 'good' : 'default'"
+        />
+        <StatCard
+          label="En pausa"
+          info="Partida pausada: su reloj del día está detenido."
+          :value="summary.paused"
+        />
+        <StatCard
+          label="En espera"
+          info="Conectados pero sin partida activa todavía."
+          :value="summary.online"
+        />
         <StatCard
           label="Sin tiempo"
+          info="Agotaron el tiempo de hoy. Vuelven a jugar tras su reinicio diario."
           :value="summary.exhausted"
           :tone="summary.exhausted ? 'warn' : 'default'"
         />
-        <StatCard label="Terminaron" :value="summary.finished" />
+        <StatCard
+          label="Terminaron"
+          info="Completaron el juego (todos los objetivos requeridos)."
+          :value="summary.finished"
+        />
       </section>
 
       <section class="panel mb-6" aria-label="Corredores">
@@ -117,12 +137,41 @@ const levelTone = {
             <thead>
               <tr>
                 <th>Corredor</th>
-                <th>Estado</th>
-                <th>Señal</th>
-                <th>Tiempo hoy</th>
-                <th class="min-w-40">Progreso</th>
-                <th>Ahora</th>
-                <th class="text-right">Ver</th>
+                <th>
+                  Estado
+                  <InfoTip
+                    text="Situación del corredor: En vivo (jugando, el reloj corre), En pausa, En espera (conectado sin partida), Desconectado, Sin tiempo (agotó el tiempo de hoy) o Terminó."
+                  />
+                </th>
+                <th>
+                  Señal
+                  <InfoTip
+                    text="Conexión de HiveShock. El punto verde indica que está conectado y el texto, hace cuánto llegó su último latido. Sin señal, el servidor deja de recibir datos y su reloj se detiene."
+                  />
+                </th>
+                <th>
+                  Tiempo hoy
+                  <InfoTip
+                    text="Tiempo que le queda hoy de su presupuesto diario. Solo corre mientras juega y se reinicia a la hora de reinicio del evento, en su zona horaria."
+                  />
+                </th>
+                <th class="min-w-40">
+                  Progreso
+                  <InfoTip text="Avance total del juego que reporta HiveShock, de 0 a 100 %." />
+                </th>
+                <th>
+                  Ahora
+                  <InfoTip
+                    text="El Link que está jugando (niño o adulto) y la zona del juego donde se encuentra."
+                  />
+                </th>
+                <th class="text-right">
+                  Viewers
+                  <InfoTip
+                    align="end"
+                    text="Espectadores conectados a su transmisión en este momento (Twitch o TikTok). Aparece — si no está transmitiendo o HiveShock no lo reporta."
+                  />
+                </th>
                 <th />
               </tr>
             </thead>
@@ -186,7 +235,12 @@ const levelTone = {
       <div class="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <section class="panel" aria-label="Actividad reciente">
           <div class="p-4">
-            <h2 class="hud-label mb-3">ACTIVIDAD RECIENTE</h2>
+            <h2 class="hud-label mb-3">
+              ACTIVIDAD RECIENTE
+              <InfoTip
+                text="Los últimos eventos del juego: ítems, jefes, cambios de zona y de estado."
+              />
+            </h2>
             <ul v-if="data.activity.length" class="space-y-2 text-sm">
               <li v-for="a in data.activity" :key="a.id" class="flex gap-3">
                 <span class="num shrink-0 text-xs text-muted">{{

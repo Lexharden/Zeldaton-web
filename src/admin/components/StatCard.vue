@@ -1,16 +1,23 @@
 <script setup lang="ts">
+import InfoTip from './InfoTip.vue'
+
 defineProps<{
   label: string
   value: string | number
   tone?: 'default' | 'good' | 'warn' | 'bad'
   hint?: string
+  /** Explains the figure in a popup. */
+  info?: string
 }>()
 </script>
 
 <template>
   <div class="panel panel-sm">
     <div class="p-4">
-      <p class="hud-label text-[10px]">{{ label }}</p>
+      <p class="hud-label text-[10px]">
+        {{ label }}
+        <InfoTip v-if="info" :text="info" :label="`Qué significa: ${label}`" />
+      </p>
       <p
         class="num mt-1 text-3xl font-bold"
         :class="{

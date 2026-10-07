@@ -146,7 +146,10 @@ describe('Monitor', () => {
     expect(banner.text()).toContain('1 de 5 donaciones')
     expect(banner.text()).toContain('ana: Ajustó el tiempo de un corredor')
     expect(banner.text()).toContain('lag del stream')
-    await banner.find('button').trigger('click')
+    await banner
+      .findAll('button')
+      .find((b) => b.text() === 'Marcar como leído')!
+      .trigger('click')
     expect(seen).toHaveBeenCalledOnce()
   })
 

@@ -5,6 +5,7 @@ import { tx } from '@/i18n'
 import LiveBadge from '@/components/common/LiveBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import { actionLabel, ago, hms, localDateTime } from '../format'
+import InfoTip from '../components/InfoTip.vue'
 import PageHeader from '../components/PageHeader.vue'
 import RacerControlDialog from '../components/RacerControlDialog.vue'
 import StatCard from '../components/StatCard.vue'
@@ -39,6 +40,18 @@ const KIND_LABEL: Record<IncidentKind, string> = {
   suspicious: 'Progreso sospechoso',
   donation_cap: 'Tope de donaciones',
   exhausted: 'Sin tiempo',
+}
+const KIND_HELP: Record<IncidentKind, string> = {
+  disconnected:
+    'El corredor lleva varios minutos sin enviar datos de HiveShock. Revisa si cerró el juego, perdió internet o falló HiveShock, y avísale por Discord.',
+  low_time:
+    'Le quedan pocos minutos del tiempo de hoy. Avísale si hace falta y vigila que el cierre sea correcto.',
+  suspicious:
+    'Su progreso subió muy rápido. Puede ser un glitch legítimo, un cambio de zona o un error de lectura: revisa el stream antes de decidir.',
+  donation_cap:
+    'Una donación de tiempo se recortó por el límite diario. No requiere acción salvo que quieras revisar la política de donaciones.',
+  exhausted:
+    'Agotó el tiempo de hoy: el juego se cierra solo y vuelve a jugar tras su reinicio diario.',
 }
 const levelTone = {
   error: 'border-danger/60 text-[#ff8aa0]',
@@ -169,7 +182,12 @@ async function markSeen() {
       <div class="p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 class="hud-label">DESDE TU ÚLTIMA VISITA</h2>
+            <h2 class="hud-label">
+              DESDE TU ÚLTIMA VISITA
+              <InfoTip
+                text="Lo ocurrido desde la última vez que pulsaste «Marcar como leído»: incidentes nuevos, donaciones recortadas y acciones de los organizadores."
+              />
+            </h2>
             <p class="mt-1 text-xs text-muted">
               {{
                 monitor.data?.lastSeenUtc
@@ -213,27 +231,39 @@ async function markSeen() {
     <section class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Resumen">
       <StatCard
         label="Incidentes abiertos"
+        info="Avisos automáticos que nadie ha revisado todavía. Márcalos como revisados o descártalos."
         :value="monitor.openCount"
         :tone="monitor.openCount ? 'bad' : 'good'"
       />
       <StatCard
         label="En vivo"
+        info="Corredores jugando ahora, con el reloj del día corriendo."
         :value="overview.data?.summary.live ?? '—'"
         :tone="overview.data?.summary.live ? 'good' : 'default'"
       />
       <StatCard
         label="Conectados"
+        info="Corredores con HiveShock conectado, sobre el total."
         :value="
           overview.data
             ? `${overview.data.summary.connected} / ${overview.data.summary.racers}`
             : '—'
         "
       />
-      <StatCard label="Sin tiempo" :value="overview.data?.summary.exhausted ?? '—'" />
+      <StatCard
+        label="Sin tiempo"
+        info="Agotaron el tiempo de hoy; vuelven tras su reinicio diario."
+        :value="overview.data?.summary.exhausted ?? '—'"
+      />
     </section>
 
     <section aria-label="Ahora" class="mb-6">
-      <h2 class="hud-label mb-3">AHORA</h2>
+      <h2 class="hud-label mb-3">
+        AHORA
+        <InfoTip
+          text="Estado en directo de cada corredor; se actualiza solo. «Sin señal de HiveShock» significa que el evento está en vivo pero no llegan datos de ese corredor."
+        />
+      </h2>
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <article
           v-for="row in sortedRacers"
@@ -347,7 +377,14 @@ async function markSeen() {
             :class="levelTone[i.severity]"
           >
             <div class="flex flex-wrap items-baseline justify-between gap-2">
-              <span class="hud-label !text-inherit">{{ KIND_LABEL[i.kind] ?? i.kind }}</span>
+              <span class="hud-label !text-inherit">
+                {{ KIND_LABEL[i.kind] ?? i.kind }}
+                <InfoTip
+                  v-if="KIND_HELP[i.kind]"
+                  :text="KIND_HELP[i.kind]"
+                  label="Qué hacer con este incidente"
+                />
+              </span>
               <span class="num text-xs text-muted"
                 >{{ localDateTime(i.ts) }} · {{ ago(ageOf(i.ts)) }}</span
               >
@@ -407,7 +444,12 @@ async function markSeen() {
 
     <section class="panel" aria-label="Bitácora">
       <div class="p-4">
-        <h2 class="hud-label mb-3">BITÁCORA DE ÁRBITROS</h2>
+        <h2 class="hud-label mb-3">
+          BITÁCORA DE ÁRBITROS
+          <InfoTip
+            text="Notas libres entre árbitros para pasar turno. No son acciones sobre la carrera (esas están en Auditoría) y se borran al reiniciar el evento."
+          />
+        </h2>
         <form class="mb-4 flex flex-wrap gap-2" @submit.prevent="addNote">
           <select v-model="noteRacer" class="a-select !w-auto" aria-label="Corredor de la nota">
             <option value="">General</option>
