@@ -443,6 +443,36 @@ fn losing_hiveshock_clears_the_reported_viewers() {
     assert!(!stream.is_live);
 }
 
+#[test]
+fn rotating_the_token_clears_a_broadcast_reported_by_the_dropped_hiveshock() {
+    let mut s = state(t0());
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    s.attach_ingest(
+        "ralbat",
+        zeldathon_server::state::IngestHandle { conn_id: 1, tx },
+    );
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(10),
+        },
+        t0(),
+    )
+    .unwrap();
+
+    let fx = s.rotate_token("ralbat", "new-hash".into()).unwrap();
+    assert!(kinds(&fx).contains(&"STREAM_UPDATED".to_string()));
+    let stream = s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap();
+    assert_eq!(stream.viewers, None);
+    assert!(!stream.is_live);
+
+    // The old session closing afterwards changes nothing.
+    s.detach_ingest("ralbat", 1);
+    assert!(!s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap().is_live);
+}
+
 // ---- catalog ------------------------------------------------------------------------------------
 
 use zeldathon_server::catalog::{Age, CatalogItem, CatalogObjective};

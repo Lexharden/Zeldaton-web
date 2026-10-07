@@ -1238,25 +1238,31 @@ impl RaceState {
                 .is_some_and(|h| h.conn_id == conn_id)
         {
             self.racers[i].ingest = None;
-            // Without HiveShock nobody vouches for the broadcast any more.
-            let playing = matches!(
-                self.racers[i].racer.status,
-                RacerStatus::Live | RacerStatus::Paused
-            );
-            if let Some(stream) = self.racers[i].racer.stream.as_mut()
-                && stream.viewers.is_some()
-            {
-                stream.viewers = None;
-                stream.is_live = playing;
-                fx.msgs.push(WsMessage::StreamUpdated {
-                    racer_id: id.to_string(),
-                    stream: stream.clone(),
-                });
-                fx.touch(i);
-            }
+            self.drop_reported_broadcast(i, &mut fx);
             self.stats_changed(&mut fx);
         }
         fx
+    }
+
+    /// Without HiveShock nobody vouches for the broadcast any more: forget the reported viewers
+    /// (the racer still counts as live while playing).
+    fn drop_reported_broadcast(&mut self, i: usize, fx: &mut Fx) {
+        let playing = matches!(
+            self.racers[i].racer.status,
+            RacerStatus::Live | RacerStatus::Paused
+        );
+        let id = self.racers[i].racer.id.clone();
+        if let Some(stream) = self.racers[i].racer.stream.as_mut()
+            && stream.viewers.is_some()
+        {
+            stream.viewers = None;
+            stream.is_live = playing;
+            fx.msgs.push(WsMessage::StreamUpdated {
+                racer_id: id,
+                stream: stream.clone(),
+            });
+            fx.touch(i);
+        }
     }
 
     fn stats_changed(&mut self, fx: &mut Fx) {
@@ -1712,10 +1718,12 @@ impl RaceState {
         let i = self.idx(id).ok_or("racer not found")?;
         self.racers[i].token_hash = token_hash;
         // The old token is dead: drop any live connection that used it.
+        let mut fx = Fx::default();
         if let Some(h) = self.racers[i].ingest.take() {
             let _ = h.tx.send(IngestDown::Replaced);
+            // The closing session no longer matches `ingest`, so `detach_ingest` will not clean up.
+            self.drop_reported_broadcast(i, &mut fx);
         }
-        let mut fx = Fx::default();
         fx.ops
             .push(PersistOp::Identity(Box::new(self.identity_row(i))));
         fx.stats_dirty = true;
