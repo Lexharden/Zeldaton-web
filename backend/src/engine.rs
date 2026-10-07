@@ -1118,6 +1118,8 @@ impl RaceState {
             {
                 // Lost connection: the backend keeps the clock, but it stops counting.
                 self.set_status(i, RacerStatus::Offline, now, &mut fx);
+                // Nobody vouches for the broadcast any more.
+                self.drop_reported_broadcast(i, &mut fx);
             }
         }
         self.flush(&mut fx);
@@ -1207,10 +1209,11 @@ impl RaceState {
                 RacerStatus::Online | RacerStatus::Live | RacerStatus::Paused
             ) {
                 r.racer.status = RacerStatus::Offline;
-                if let Some(s) = r.racer.stream.as_mut() {
-                    s.is_live = false;
-                    s.viewers = None;
-                }
+            }
+            // Nobody is connected, whatever status was stored: no broadcast survives a restart.
+            if let Some(s) = r.racer.stream.as_mut() {
+                s.is_live = false;
+                s.viewers = None;
             }
             r.checkpoint.at = now;
             r.last_heartbeat = None;

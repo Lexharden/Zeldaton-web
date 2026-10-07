@@ -473,6 +473,48 @@ fn rotating_the_token_clears_a_broadcast_reported_by_the_dropped_hiveshock() {
     assert!(!s.view(s.idx("ralbat").unwrap(), t0()).stream.unwrap().is_live);
 }
 
+#[test]
+fn a_lost_heartbeat_and_a_restart_both_clear_a_reported_broadcast() {
+    let mut s = state(t0());
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    s.attach_ingest(
+        "ralbat",
+        zeldathon_server::state::IngestHandle { conn_id: 1, tx },
+    );
+    ingest(&mut s, "ralbat", IngestMsg::Heartbeat { game_running: None }, t0()).unwrap();
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(10),
+        },
+        t0(),
+    )
+    .unwrap();
+    let i = s.idx("ralbat").unwrap();
+
+    // Heartbeat lost: the racer goes offline and the broadcast is no longer reported.
+    let later = t0() + Duration::seconds(120);
+    s.tick(later, 30);
+    let stream = s.view(i, later).stream.unwrap();
+    assert_eq!(stream.viewers, None);
+    assert!(!stream.is_live);
+
+    // A stale persisted broadcast on an offline racer does not survive a restart.
+    let mut s = state(t0());
+    let i = s.idx("ralbat").unwrap();
+    {
+        let stream = s.racers[i].racer.stream.get_or_insert_with(Default::default);
+        stream.is_live = true;
+        stream.viewers = Some(5);
+    }
+    s.recover(t0());
+    let stream = s.view(i, t0()).stream.unwrap();
+    assert_eq!(stream.viewers, None);
+    assert!(!stream.is_live);
+}
+
 // ---- catalog ------------------------------------------------------------------------------------
 
 use zeldathon_server::catalog::{Age, CatalogItem, CatalogObjective};
