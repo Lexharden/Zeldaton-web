@@ -112,37 +112,41 @@ watch(open, (v) => (document.body.style.overflow = v ? 'hidden' : ''))
       </div>
     </nav>
 
-    <Transition name="page">
-      <div
-        v-if="open"
-        id="mobile-menu"
-        class="fixed inset-x-0 bottom-0 top-16 overflow-y-auto bg-background/98 lg:hidden"
-      >
-        <div class="container-x flex min-h-full flex-col py-8">
-          <ul class="space-y-1">
-            <li
-              v-for="(l, i) in links.concat([
-                { label: 'nav.hiveshock', mobile: 'nav.hiveshock', to: '/hiveshock' },
-              ])"
-              :key="l.label"
-              class="enter"
-              :style="{ '--d': i }"
-            >
-              <RouterLink
-                :to="l.to"
-                class="display block border-b border-line py-4 text-5xl text-white active:text-accent"
-                @click="open = false"
+    <!-- In body: the header's backdrop-filter would otherwise become the containing block of this
+         fixed panel and collapse it to the header's height. -->
+    <Teleport to="body">
+      <Transition name="page">
+        <div
+          v-if="open"
+          id="mobile-menu"
+          class="fixed inset-x-0 bottom-0 top-16 z-40 overflow-y-auto bg-background/98 lg:hidden"
+        >
+          <div class="container-x flex min-h-full flex-col py-8">
+            <ul class="space-y-1">
+              <li
+                v-for="(l, i) in links.concat([
+                  { label: 'nav.hiveshock', mobile: 'nav.hiveshock', to: '/hiveshock' },
+                ])"
+                :key="l.label"
+                class="enter"
+                :style="{ '--d': i }"
               >
-                {{ t(l.mobile) }}
-              </RouterLink>
-            </li>
-          </ul>
-          <LanguageSwitch class="mt-8" />
-          <div v-if="event.isLive" class="mt-6">
-            <LiveBadge status="live" :label="t('nav.liveNow')" />
+                <RouterLink
+                  :to="l.to"
+                  class="display block border-b border-line py-4 text-5xl text-white active:text-accent"
+                  @click="open = false"
+                >
+                  {{ t(l.mobile) }}
+                </RouterLink>
+              </li>
+            </ul>
+            <LanguageSwitch class="mt-8" />
+            <div v-if="event.isLive" class="mt-6">
+              <LiveBadge status="live" :label="t('nav.liveNow')" />
+            </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
   </header>
 </template>
