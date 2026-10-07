@@ -122,6 +122,22 @@ const FIELDS: {
     step: 10,
     hint: '…dentro de este tiempo es sospechosa.',
   },
+  {
+    key: 'noShowMinutes',
+    label: 'No aparece (min)',
+    min: 1,
+    max: 120,
+    step: 1,
+    hint: 'Avisa si no hay señal este rato después de la hora de su live.',
+  },
+  {
+    key: 'uncoveredLeadMinutes',
+    label: 'Sin árbitro (min antes)',
+    min: 5,
+    max: 720,
+    step: 5,
+    hint: 'Avisa si el live empieza pronto y nadie lo arbitra.',
+  },
 ]
 const draft = ref<Partial<Record<keyof DiscordThresholds, number>>>({})
 const dirty = computed(() =>

@@ -26,6 +26,10 @@ pub struct Thresholds {
     pub jump_percent: f64,
     /// ...within this many seconds is flagged as suspicious.
     pub jump_window_seconds: i64,
+    /// A racer not connected this long after the start of their slot alerts the referees.
+    pub no_show_minutes: i64,
+    /// A slot without a referee alerts this long before it starts.
+    pub uncovered_lead_minutes: i64,
 }
 
 impl Default for Thresholds {
@@ -35,6 +39,8 @@ impl Default for Thresholds {
             low_time_minutes: 10,
             jump_percent: 20.0,
             jump_window_seconds: 120,
+            no_show_minutes: 10,
+            uncovered_lead_minutes: 30,
         }
     }
 }
@@ -106,6 +112,12 @@ impl NotifySettings {
                     }
                     "jumpWindowSeconds" => {
                         next.thresholds.jump_window_seconds = int_in(key, value, 10, 3600)?
+                    }
+                    "noShowMinutes" => {
+                        next.thresholds.no_show_minutes = int_in(key, value, 1, 120)?
+                    }
+                    "uncoveredLeadMinutes" => {
+                        next.thresholds.uncovered_lead_minutes = int_in(key, value, 5, 720)?
                     }
                     "jumpPercent" => {
                         let v = value

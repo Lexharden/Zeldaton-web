@@ -158,6 +158,8 @@ export interface DiscordThresholds {
   lowTimeMinutes: number
   jumpPercent: number
   jumpWindowSeconds: number
+  noShowMinutes: number
+  uncoveredLeadMinutes: number
 }
 
 /** State of the Discord notifications. */
@@ -226,4 +228,82 @@ export interface UserRow extends AdminUser {
   id: number
   disabled: boolean
   createdAt: string
+}
+
+// ---- referee monitor
+
+export type IncidentKind =
+  | 'disconnected'
+  | 'low_time'
+  | 'suspicious'
+  | 'donation_cap'
+  | 'exhausted'
+  | 'no_show'
+  | 'uncovered'
+export type IncidentStatus = 'open' | 'reviewed' | 'dismissed'
+
+export interface Incident {
+  id: number
+  ts: string
+  kind: IncidentKind
+  severity: 'info' | 'warn' | 'error'
+  racerId: string | null
+  racerName: string | null
+  message: string
+  payload: Record<string, unknown>
+  status: IncidentStatus
+  reviewedBy: string | null
+  reviewedAt: string | null
+  note: string | null
+  /** The condition went away by itself (the racer reconnected...). */
+  endedAt: string | null
+}
+
+export interface CatchUp {
+  since: string
+  newIncidents: number
+  byKind: Partial<Record<IncidentKind, number>>
+  actions: Pick<AuditRow, 'ts' | 'actor' | 'action' | 'racerId' | 'payload'>[]
+  donations: number
+  donationsLimited: number
+}
+
+export interface MonitorData {
+  serverTimeUtc: string
+  openCount: number
+  open: Incident[]
+  recent: Incident[]
+  /** `null` the first time this referee opens the monitor. */
+  lastSeenUtc: string | null
+  catchUp: CatchUp
+  /** Schedule slots from 6 hours ago to 36 hours ahead. */
+  slots: ScheduleSlot[]
+  /** Latest log book notes, newest first. */
+  notes: RefereeNote[]
+}
+
+export interface ScheduleSlot {
+  id: number
+  racerId: string
+  racerName: string
+  racerTimezone: string
+  startUtc: string
+  endUtc: string
+  note: string | null
+  assignees: { userId: number; username: string }[]
+}
+
+export interface RefereeNote {
+  id: number
+  ts: string
+  racerId: string | null
+  author: string
+  text: string
+}
+
+export interface SlotInput {
+  racerId?: string
+  startUtc: string
+  endUtc: string
+  note?: string
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ART } from '@/config/artwork'
 import { DEVELOPER } from '@/config/event'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
@@ -7,10 +7,12 @@ import {
   Activity,
   BookOpen,
   CalendarClock,
+  CalendarDays,
   ExternalLink,
   Gift,
   KeyRound,
   LayoutDashboard,
+  Radar,
   LogOut,
   ScrollText,
   Users,
@@ -21,6 +23,7 @@ import Modal from './components/Modal.vue'
 import ToastHost from './components/ToastHost.vue'
 import { messageOf, useToasts } from './composables/useToasts'
 import { useAdminStore } from './stores/admin'
+import { useMonitorStore } from './stores/monitor'
 import './admin.css'
 
 /** Chrome of the organizer panel: sidebar (what the role may see), user menu and global hosts. */
@@ -28,10 +31,32 @@ const admin = useAdminStore()
 const route = useRoute()
 const router = useRouter()
 const toasts = useToasts()
+const monitor = useMonitorStore()
+
+// Open incidents are counted in the menu from any page of the panel.
+const baseTitle = ref('')
+onMounted(() => {
+  baseTitle.value = document.title.replace(/^\(\d+\) /, '')
+  monitor.start()
+})
+onBeforeUnmount(() => {
+  monitor.stop()
+  if (baseTitle.value) document.title = baseTitle.value
+})
+// ...and in the tab title, so a referee with the tab in the background sees it.
+watch(
+  () => monitor.openCount,
+  (n) => {
+    if (!baseTitle.value) return
+    document.title = n ? `(${n}) ${baseTitle.value}` : baseTitle.value
+  },
+)
 
 const nav = computed(() =>
   [
     { name: 'admin-dashboard', label: 'Panel', icon: LayoutDashboard, role: 'moderator' },
+    { name: 'admin-monitor', label: 'Monitor', icon: Radar, role: 'moderator' },
+    { name: 'admin-schedule', label: 'Agenda', icon: CalendarDays, role: 'moderator' },
     { name: 'admin-event', label: 'Evento', icon: CalendarClock, role: 'admin' },
     { name: 'admin-racers', label: 'Corredores', icon: Activity, role: 'moderator' },
     { name: 'admin-catalog', label: 'Catálogo', icon: BookOpen, role: 'admin' },
@@ -103,6 +128,12 @@ async function changePassword() {
           :exact-active-class="n.name === 'admin-dashboard' ? '!bg-primary/15 !text-white' : ''"
         >
           <component :is="n.icon" class="size-4" aria-hidden="true" />{{ n.label }}
+          <span
+            v-if="n.name === 'admin-monitor' && monitor.openCount"
+            class="num ml-auto rounded-full bg-danger/80 px-1.5 text-[11px] font-bold text-white"
+            :aria-label="`${monitor.openCount} incidentes abiertos`"
+            >{{ monitor.openCount }}</span
+          >
         </RouterLink>
       </nav>
       <div

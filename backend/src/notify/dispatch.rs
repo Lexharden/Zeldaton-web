@@ -127,6 +127,7 @@ fn snapshot(hub: &AppState, now: DateTime<Utc>) -> Snapshot {
             event_live: s.event_status(now) == EventStatus::Live,
             racers,
             leader,
+            slots: Vec::new(),
         }
     })
 }
@@ -230,7 +231,11 @@ impl Dispatcher {
             let g = gate(&self.hub, Channel::Public, now);
             g.configured && g.event_live && !g.rehearsal && settings.public_enabled
         };
-        let snap = snapshot(&self.hub, now);
+        let mut snap = snapshot(&self.hub, now);
+        match crate::schedule::around(&self.hub.pool, now).await {
+            Ok(slots) => snap.slots = slots,
+            Err(e) => tracing::warn!(error = %e, "could not read the schedule"),
+        }
         for n in self
             .scan
             .scan(&snap, &settings.thresholds, public_open, now)
@@ -244,6 +249,12 @@ impl Dispatcher {
         let kind = n.kind();
         let channel = kind.channel();
         let settings = self.hub.notify_settings();
+        // The monitor keeps the incidents whether or not Discord is on.
+        if let Err(e) =
+            crate::incidents::record(&self.hub.pool, &n, &settings.thresholds, now).await
+        {
+            tracing::warn!(error = %e, "could not record an incident");
+        }
         let g = gate(&self.hub, channel, now);
         if let Err(why) = self.policy.admit(&n, &settings, g, now) {
             tracing::debug!(kind = kind.key(), why, "notice not sent");

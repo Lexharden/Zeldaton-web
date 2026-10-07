@@ -11,8 +11,14 @@ import type {
   DonationsResponse,
   EventAction,
   EventPatchInput,
+  Incident,
+  IncidentStatus,
   LoginResponse,
   MeResponse,
+  MonitorData,
+  RefereeNote,
+  ScheduleSlot,
+  SlotInput,
   NewRacerInput,
   Overview,
   OverviewRacer,
@@ -209,6 +215,39 @@ export class AdminApi {
   }
   deleteRacerPhoto = (id: string) =>
     this.request<Racer>('DELETE', `/racers/${encodeURIComponent(id)}/photo`)
+
+  // ---- referee monitor
+  monitor = () => this.request<MonitorData>('GET', '/monitor')
+  monitorSeen = () => this.request<{ ok: true }>('POST', '/monitor/seen', {})
+  reviewIncident = (id: number, status: IncidentStatus, note?: string) =>
+    this.request<Incident>('POST', `/incidents/${id}/review`, { status, note })
+
+  // ---- schedule and log book
+  schedule = (from?: string, to?: string) => {
+    const q = new URLSearchParams()
+    if (from) q.set('from', from)
+    if (to) q.set('to', to)
+    const qs = q.toString()
+    return this.request<{ serverTimeUtc: string; slots: ScheduleSlot[] }>(
+      'GET',
+      `/schedule${qs ? `?${qs}` : ''}`,
+    )
+  }
+  createSlot = (input: SlotInput) => this.request<{ id: number }>('POST', '/schedule', input)
+  updateSlot = (id: number, input: SlotInput) =>
+    this.request<{ ok: true }>('PATCH', `/schedule/${id}`, input)
+  deleteSlot = (id: number) => this.request<{ ok: true }>('DELETE', `/schedule/${id}`)
+  /** A referee takes a slot (themselves unless an admin passes `userId`). */
+  takeSlot = (id: number, userId?: number) =>
+    this.request<{ ok: true }>('POST', `/schedule/${id}/assign`, userId ? { userId } : {})
+  leaveSlot = (id: number, userId?: number) =>
+    this.request<{ ok: true }>(
+      'DELETE',
+      `/schedule/${id}/assign${userId ? `?userId=${userId}` : ''}`,
+    )
+  addNote = (text: string, racerId?: string) =>
+    this.request<RefereeNote>('POST', '/notes', { text, racerId })
+  deleteNote = (id: number) => this.request<{ ok: true }>('DELETE', `/notes/${id}`)
 
   // ---- audit
   audit = (limit = 100) => this.request<AuditRow[]>('GET', `/audit?limit=${limit}`)

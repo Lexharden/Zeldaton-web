@@ -237,6 +237,42 @@ pub fn render(n: &Notice, ctx: &Ctx) -> Value {
                 )
             }
         }
+        Detail::NoShow {
+            minutes_late,
+            start,
+            ..
+        } => embed(
+            n,
+            ctx,
+            format!("🚫 {name} no aparece: lleva {minutes_late} min de retraso"),
+            format!(
+                "Su live estaba programado a las <t:{}:t> (<t:{}:R>) y no hay señal de HiveShock.",
+                start.timestamp(),
+                start.timestamp()
+            ),
+            RED,
+            true,
+        ),
+        Detail::Uncovered {
+            starts_in_minutes,
+            start,
+            ..
+        } => embed(
+            n,
+            ctx,
+            if *starts_in_minutes > 0 {
+                format!("🧑‍⚖️ Falta árbitro para el live de {name}")
+            } else {
+                format!("🧑‍⚖️ El live de {name} ya empezó sin árbitro")
+            },
+            format!(
+                "Empieza a las <t:{}:t> (<t:{}:R>). Toma la franja desde el monitor.",
+                start.timestamp(),
+                start.timestamp()
+            ),
+            ORANGE,
+            true,
+        ),
         Detail::LowTime { minutes_left } => embed(
             n,
             ctx,

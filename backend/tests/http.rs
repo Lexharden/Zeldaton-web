@@ -2325,3 +2325,316 @@ async fn one_off_notices_are_not_repeated_after_a_restart_and_a_reset_starts_cle
             .unwrap()
     );
 }
+
+#[tokio::test]
+async fn the_monitor_keeps_incidents_without_discord_and_referees_review_them() {
+    // No webhook at all: the incident exists anyway.
+    let h = harness().await;
+    start_notifier(&h);
+    make_user(&h, "mod", Role::Moderator).await;
+    let m = login_as(&h, "mod").await;
+    make_event_live(&h).await;
+
+    let mut hs = racer_ws(&h, "cuaco").await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "GAME_PROGRESS", "progress": { "percentage": 10.0 } }),
+    )
+    .await;
+    send(
+        &mut hs,
+        json!({ "type": "GAME_PROGRESS", "progress": { "percentage": 70.0 } }),
+    )
+    .await;
+
+    let mut incident = Value::Null;
+    for _ in 0..50 {
+        let (s, _, body) = call_h(&h, "GET", "/api/admin/monitor", &m.read(), None).await;
+        assert_eq!(s, StatusCode::OK);
+        if let Some(i) = body["open"]
+            .as_array()
+            .and_then(|a| a.iter().find(|i| i["kind"] == "suspicious"))
+        {
+            assert_eq!(body["openCount"], 1);
+            // The first visit looks back over the default window.
+            assert!(body["catchUp"]["newIncidents"].as_i64().unwrap() >= 1);
+            incident = i.clone();
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(incident["racerId"], "cuaco", "{incident}");
+    assert_eq!(incident["status"], "open");
+    let id = incident["id"].as_i64().unwrap();
+
+    // Reviewing needs a known status, writes need the CSRF token, and it is audited with the note.
+    let uri = format!("/api/admin/incidents/{id}/review");
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        &uri,
+        &m.write(),
+        Some(json!({ "status": "nope" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        &uri,
+        &m.read(),
+        Some(json!({ "status": "reviewed" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, row) = call_h(
+        &h,
+        "POST",
+        &uri,
+        &m.write(),
+        Some(json!({ "status": "dismissed", "note": " lag del emulador " })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{row}");
+    assert_eq!(row["status"], "dismissed");
+    assert_eq!(row["reviewedBy"], "mod");
+    assert_eq!(row["note"], "lag del emulador");
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/incidents/99999/review",
+        &m.write(),
+        Some(json!({ "status": "reviewed" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    let (_, _, body) = call_h(&h, "GET", "/api/admin/monitor", &m.read(), None).await;
+    assert_eq!(body["openCount"], 0);
+    assert_eq!(body["recent"][0]["id"], id);
+
+    tokio::time::sleep(Duration::from_millis(300)).await; // the audit row is persisted asynchronously
+    let (_, _, audit) = call_h(&h, "GET", "/api/admin/audit", &m.read(), None).await;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["action"] == "incident.review" && a["actor"] == "mod"),
+        "{audit}"
+    );
+
+    // "Seen" moves the next catch-up window to now.
+    let (s, _, _) = call_h(&h, "POST", "/api/admin/monitor/seen", &m.write(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, _, body) = call_h(&h, "GET", "/api/admin/monitor", &m.read(), None).await;
+    assert!(body["lastSeenUtc"].is_string());
+    assert_eq!(body["catchUp"]["newIncidents"], 0);
+}
+
+#[tokio::test]
+async fn the_schedule_is_kept_by_admins_taken_by_referees_and_watched_by_the_scanner() {
+    let h = harness().await;
+    start_notifier(&h);
+    make_user(&h, "mod", Role::Moderator).await;
+    make_user(&h, "mod2", Role::Moderator).await;
+    let m = login_as(&h, "mod").await;
+    let m2 = login_as(&h, "mod2").await;
+    make_event_live(&h).await;
+
+    let at = |mins: i64| (Utc::now() + chrono::Duration::minutes(mins)).to_rfc3339();
+    let slot = |racer: &str, from: i64, to: i64| json!({ "racerId": racer, "startUtc": at(from), "endUtc": at(to), "note": "Parte 1" });
+
+    // Only admins keep the schedule, and the hours must make sense.
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/schedule",
+        &m.write(),
+        Some(slot("cuaco", 5, 65)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/schedule",
+        Some(ADMIN),
+        Some(slot("cuaco", 65, 5)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/schedule",
+        Some(ADMIN),
+        Some(slot("nadie", 5, 65)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    // cuaco is expected in 10 minutes, with nobody to referee; xime was due 15 minutes ago.
+    let (s, soon) = call(
+        &h,
+        "POST",
+        "/api/admin/schedule",
+        Some(ADMIN),
+        Some(slot("cuaco", 10, 70)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{soon}");
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/schedule",
+        Some(ADMIN),
+        Some(slot("cuaco", 30, 90)),
+    )
+    .await;
+    assert_eq!(
+        s,
+        StatusCode::CONFLICT,
+        "overlapping hours of the same racer"
+    );
+    let (s, late) = call(
+        &h,
+        "POST",
+        "/api/admin/schedule",
+        Some(ADMIN),
+        Some(slot("xime", -15, 45)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (soon, late) = (soon["id"].as_i64().unwrap(), late["id"].as_i64().unwrap());
+
+    // The scanner records both as incidents (Discord is not even configured).
+    let mut kinds = Vec::new();
+    for _ in 0..50 {
+        let (_, _, body) = call_h(&h, "GET", "/api/admin/monitor", &m.read(), None).await;
+        kinds = body["open"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|i| i["kind"].as_str().map(str::to_string))
+            .collect();
+        if kinds.contains(&"uncovered".into()) && kinds.contains(&"no_show".into()) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        kinds.contains(&"uncovered".into()) && kinds.contains(&"no_show".into()),
+        "{kinds:?}"
+    );
+
+    // A referee takes a slot for themselves, twice is harmless, and cannot act for somebody else.
+    let take = format!("/api/admin/schedule/{soon}/assign");
+    for _ in 0..2 {
+        let (s, _, _) = call_h(&h, "POST", &take, &m.write(), None).await;
+        assert_eq!(s, StatusCode::OK);
+    }
+    let (_, _, users) = call_h(&h, "GET", "/api/admin/me", &m2.read(), None).await;
+    let other = users["user"]["id"].as_i64().unwrap();
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        &take,
+        &m.write(),
+        Some(json!({ "userId": other })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/schedule/9999/assign",
+        &m.write(),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    let (s, _, body) = call_h(&h, "GET", "/api/admin/schedule", &m2.read(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let slots = body["slots"].as_array().unwrap();
+    assert_eq!(slots.len(), 2);
+    let mine = slots.iter().find(|x| x["id"] == soon).unwrap();
+    assert_eq!(mine["assignees"].as_array().unwrap().len(), 1);
+    assert_eq!(mine["assignees"][0]["username"], "mod");
+    assert_eq!(mine["racerId"], "cuaco");
+
+    let (s, _, _) = call_h(&h, "DELETE", &take, &m.write(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, _, body) = call_h(&h, "GET", "/api/admin/monitor", &m.read(), None).await;
+    assert!(
+        body["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|x| x["assignees"].as_array().unwrap().is_empty())
+    );
+
+    // Log book: anyone writes, only the author (or an admin) deletes.
+    let (s, _, n) = call_h(
+        &h,
+        "POST",
+        "/api/admin/notes",
+        &m.write(),
+        Some(json!({ "racerId": "xime", "text": "  Vuelve en 5 min  " })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{n}");
+    assert_eq!(n["text"], "Vuelve en 5 min");
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/admin/notes",
+        &m.write(),
+        Some(json!({ "text": "   " })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let nid = n["id"].as_i64().unwrap();
+    let (s, _, _) = call_h(
+        &h,
+        "DELETE",
+        &format!("/api/admin/notes/{nid}"),
+        &m2.write(),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND, "not their note");
+    let (_, _, body) = call_h(&h, "GET", "/api/admin/monitor", &m2.read(), None).await;
+    assert_eq!(body["notes"][0]["author"], "mod");
+    let (s, _, _) = call_h(
+        &h,
+        "DELETE",
+        &format!("/api/admin/notes/{nid}"),
+        &m.write(),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    // Admins edit and delete slots.
+    let (s, _) = call(
+        &h,
+        "DELETE",
+        &format!("/api/admin/schedule/{late}"),
+        Some(ADMIN),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _) = call(
+        &h,
+        "DELETE",
+        &format!("/api/admin/schedule/{late}"),
+        Some(ADMIN),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+}

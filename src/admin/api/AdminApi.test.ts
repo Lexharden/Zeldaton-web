@@ -217,6 +217,8 @@ describe('AdminApi', () => {
         lowTimeMinutes: 10,
         jumpPercent: 20,
         jumpWindowSeconds: 120,
+        noShowMinutes: 10,
+        uncoveredLeadMinutes: 30,
       },
     }
     const { fetcher, calls } = fakeFetch([

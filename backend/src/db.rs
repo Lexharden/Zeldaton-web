@@ -113,7 +113,7 @@ pub enum PersistOp {
     ClearRaceData,
 }
 
-fn rfc(d: DateTime<Utc>) -> String {
+pub(crate) fn rfc(d: DateTime<Utc>) -> String {
     d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
@@ -250,6 +250,12 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
                 .await?;
             // A reset race starts with a clean slate of "already announced" notices.
             sqlx::query("DELETE FROM notices_sent")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM incidents")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM referee_notes")
                 .execute(&mut *tx)
                 .await?;
             tx.commit().await?;
