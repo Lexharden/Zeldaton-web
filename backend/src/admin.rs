@@ -81,15 +81,6 @@ pub fn router(hub: AppState) -> Router<AppState> {
         .route("/monitor", get(monitor))
         .route("/monitor/seen", post(monitor_seen))
         .route("/incidents", get(incidents_list))
-        .route("/schedule", get(schedule_list).post(schedule_create))
-        .route(
-            "/schedule/{id}",
-            patch(schedule_update).delete(schedule_delete),
-        )
-        .route(
-            "/schedule/{id}/assign",
-            post(schedule_assign).delete(schedule_unassign),
-        )
         .route("/notes", get(notes_list).post(notes_add))
         .route("/notes/{id}", delete(notes_delete))
         .route("/incidents/{id}/review", post(incident_review))
@@ -967,14 +958,7 @@ async fn monitor(
     let catch_up = crate::incidents::catch_up(&hub.pool, &since)
         .await
         .map_err(ApiError::internal)?;
-    let slots = crate::schedule::list(
-        &hub.pool,
-        now - chrono::Duration::hours(6),
-        now + chrono::Duration::hours(36),
-    )
-    .await
-    .map_err(ApiError::internal)?;
-    let notes = crate::schedule::notes(&hub.pool, None, 30)
+    let notes = crate::logbook::notes(&hub.pool, None, 30)
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(json!({
@@ -984,7 +968,6 @@ async fn monitor(
         "recent": recent,
         "lastSeenUtc": seen,
         "catchUp": catch_up,
-        "slots": slots,
         "notes": notes,
     })))
 }
@@ -1078,215 +1061,15 @@ async fn incident_review(
     Ok(Json(row))
 }
 
-// ---- schedule and log book ------------------------------------------------------------------------
+// ---- log book -----------------------------------------------------------------------------------
 
-fn schedule_error(e: crate::schedule::ScheduleError) -> ApiError {
-    use crate::schedule::ScheduleError as E;
+fn note_error(e: crate::logbook::NoteError) -> ApiError {
+    use crate::logbook::NoteError as E;
     match e {
         E::Invalid(m) => ApiError::BadRequest(m),
-        E::Overlap => ApiError::Conflict("that racer already has a slot at those hours".into()),
         E::NotFound => ApiError::NotFound,
         E::Db(m) => ApiError::Internal(m),
     }
-}
-
-#[derive(Deserialize)]
-struct ScheduleQuery {
-    from: Option<String>,
-    to: Option<String>,
-}
-
-/// The schedule between two instants (default: the last 12 hours and the next 7 days, at most 31 days).
-async fn schedule_list(
-    State(hub): State<AppState>,
-    Query(q): Query<ScheduleQuery>,
-) -> Result<Json<Value>, ApiError> {
-    let now = Utc::now();
-    let parse = |v: &Option<String>, default| match v.as_deref().filter(|s| !s.is_empty()) {
-        Some(s) => chrono::DateTime::parse_from_rfc3339(s)
-            .map(|d| d.with_timezone(&Utc))
-            .map_err(|_| ApiError::BadRequest(format!("`{s}` is not an RFC 3339 date"))),
-        None => Ok(default),
-    };
-    let from = parse(&q.from, now - chrono::Duration::hours(12))?;
-    let to = parse(&q.to, now + chrono::Duration::days(7))?;
-    if to <= from || to - from > chrono::Duration::days(31) {
-        return Err(ApiError::BadRequest(
-            "`to` must be after `from`, at most 31 days apart".into(),
-        ));
-    }
-    let slots = crate::schedule::list(&hub.pool, from, to)
-        .await
-        .map_err(ApiError::internal)?;
-    Ok(Json(json!({ "serverTimeUtc": iso(now), "slots": slots })))
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SlotBody {
-    racer_id: Option<String>,
-    start_utc: String,
-    end_utc: String,
-    note: Option<String>,
-}
-
-fn clean_note(note: &Option<String>) -> Result<Option<String>, ApiError> {
-    let note = note
-        .as_deref()
-        .map(str::trim)
-        .filter(|n| !n.is_empty())
-        .map(str::to_string);
-    if note.as_ref().is_some_and(|n| n.chars().count() > 200) {
-        return Err(ApiError::BadRequest(
-            "the note is too long (200 max)".into(),
-        ));
-    }
-    Ok(note)
-}
-
-async fn schedule_create(
-    State(hub): State<AppState>,
-    Extension(p): Extension<Principal>,
-    Json(b): Json<SlotBody>,
-) -> Result<Json<Value>, ApiError> {
-    p.require(Role::Admin)?;
-    let racer = b
-        .racer_id
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("racerId is required".into()))?;
-    let (start, end) =
-        crate::schedule::parse_window(&b.start_utc, &b.end_utc).map_err(schedule_error)?;
-    let note = clean_note(&b.note)?;
-    let id = crate::schedule::create(&hub.pool, racer, start, end, note.as_deref(), &p.actor)
-        .await
-        .map_err(schedule_error)?;
-    hub.audit_as(
-        &p.actor,
-        "schedule.create",
-        Some(racer),
-        json!({ "slotId": id, "startUtc": b.start_utc, "endUtc": b.end_utc }),
-    );
-    Ok(Json(json!({ "id": id })))
-}
-
-async fn schedule_update(
-    State(hub): State<AppState>,
-    Extension(p): Extension<Principal>,
-    Path(id): Path<i64>,
-    Json(b): Json<SlotBody>,
-) -> Result<Json<Value>, ApiError> {
-    p.require(Role::Admin)?;
-    let (start, end) =
-        crate::schedule::parse_window(&b.start_utc, &b.end_utc).map_err(schedule_error)?;
-    let note = clean_note(&b.note)?;
-    let racer = crate::schedule::racer_of(&hub.pool, id)
-        .await
-        .map_err(ApiError::internal)?;
-    crate::schedule::update(&hub.pool, id, start, end, note.as_deref())
-        .await
-        .map_err(schedule_error)?;
-    hub.audit_as(
-        &p.actor,
-        "schedule.update",
-        racer.as_deref(),
-        json!({ "slotId": id, "startUtc": b.start_utc, "endUtc": b.end_utc }),
-    );
-    Ok(Json(json!({ "ok": true })))
-}
-
-async fn schedule_delete(
-    State(hub): State<AppState>,
-    Extension(p): Extension<Principal>,
-    Path(id): Path<i64>,
-) -> Result<Json<Value>, ApiError> {
-    p.require(Role::Admin)?;
-    let racer = crate::schedule::racer_of(&hub.pool, id)
-        .await
-        .map_err(ApiError::internal)?;
-    if !crate::schedule::delete(&hub.pool, id)
-        .await
-        .map_err(ApiError::internal)?
-    {
-        return Err(ApiError::NotFound);
-    }
-    hub.audit_as(
-        &p.actor,
-        "schedule.delete",
-        racer.as_deref(),
-        json!({ "slotId": id }),
-    );
-    Ok(Json(json!({ "ok": true })))
-}
-
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct AssignBody {
-    user_id: Option<i64>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AssignQuery {
-    user_id: Option<i64>,
-}
-
-/// Who a take/release is for: the caller by default; only an admin can act for somebody else.
-fn assignee(p: &Principal, asked: Option<i64>) -> Result<i64, ApiError> {
-    match (asked, p.user_id) {
-        (Some(other), own) if Some(other) != own => {
-            p.require(Role::Admin)?;
-            Ok(other)
-        }
-        (Some(id), _) | (None, Some(id)) => Ok(id),
-        (None, None) => Err(ApiError::BadRequest("userId is required".into())),
-    }
-}
-
-/// A referee takes a slot ("I will watch this one"). Taking it twice is harmless.
-async fn schedule_assign(
-    State(hub): State<AppState>,
-    Extension(p): Extension<Principal>,
-    Path(id): Path<i64>,
-    body: Option<Json<AssignBody>>,
-) -> Result<Json<Value>, ApiError> {
-    p.require(Role::Moderator)?;
-    let user = assignee(&p, body.and_then(|Json(b)| b.user_id))?;
-    let racer = crate::schedule::racer_of(&hub.pool, id)
-        .await
-        .map_err(ApiError::internal)?;
-    crate::schedule::assign(&hub.pool, id, user)
-        .await
-        .map_err(schedule_error)?;
-    hub.audit_as(
-        &p.actor,
-        "schedule.assign",
-        racer.as_deref(),
-        json!({ "slotId": id, "userId": user }),
-    );
-    Ok(Json(json!({ "ok": true })))
-}
-
-async fn schedule_unassign(
-    State(hub): State<AppState>,
-    Extension(p): Extension<Principal>,
-    Path(id): Path<i64>,
-    Query(q): Query<AssignQuery>,
-) -> Result<Json<Value>, ApiError> {
-    p.require(Role::Moderator)?;
-    let user = assignee(&p, q.user_id)?;
-    let racer = crate::schedule::racer_of(&hub.pool, id)
-        .await
-        .map_err(ApiError::internal)?;
-    crate::schedule::unassign(&hub.pool, id, user)
-        .await
-        .map_err(ApiError::internal)?;
-    hub.audit_as(
-        &p.actor,
-        "schedule.unassign",
-        racer.as_deref(),
-        json!({ "slotId": id, "userId": user }),
-    );
-    Ok(Json(json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -1300,7 +1083,7 @@ async fn notes_list(
     Query(q): Query<NotesQuery>,
 ) -> Result<Json<Vec<Value>>, ApiError> {
     let racer = q.racer.as_deref().filter(|r| !r.is_empty());
-    let rows = crate::schedule::notes(&hub.pool, racer, q.limit.unwrap_or(50).clamp(1, 200))
+    let rows = crate::logbook::notes(&hub.pool, racer, q.limit.unwrap_or(50).clamp(1, 200))
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(rows))
@@ -1320,9 +1103,9 @@ async fn notes_add(
 ) -> Result<Json<Value>, ApiError> {
     p.require(Role::Moderator)?;
     let racer = b.racer_id.as_deref().filter(|r| !r.is_empty());
-    let note = crate::schedule::add_note(&hub.pool, racer, &p.actor, &b.text, Utc::now())
+    let note = crate::logbook::add_note(&hub.pool, racer, &p.actor, &b.text, Utc::now())
         .await
-        .map_err(schedule_error)?;
+        .map_err(note_error)?;
     Ok(Json(note))
 }
 
@@ -1334,7 +1117,7 @@ async fn notes_delete(
 ) -> Result<Json<Value>, ApiError> {
     p.require(Role::Moderator)?;
     let only = (p.role < Role::Admin).then_some(p.actor.as_str());
-    if !crate::schedule::delete_note(&hub.pool, id, only)
+    if !crate::logbook::delete_note(&hub.pool, id, only)
         .await
         .map_err(ApiError::internal)?
     {

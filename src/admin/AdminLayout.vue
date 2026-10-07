@@ -7,7 +7,6 @@ import {
   Activity,
   BookOpen,
   CalendarClock,
-  CalendarDays,
   ExternalLink,
   Gift,
   KeyRound,
@@ -56,7 +55,6 @@ const nav = computed(() =>
   [
     { name: 'admin-dashboard', label: 'Panel', icon: LayoutDashboard, role: 'moderator' },
     { name: 'admin-monitor', label: 'Monitor', icon: Radar, role: 'moderator' },
-    { name: 'admin-schedule', label: 'Agenda', icon: CalendarDays, role: 'moderator' },
     { name: 'admin-event', label: 'Evento', icon: CalendarClock, role: 'admin' },
     { name: 'admin-racers', label: 'Corredores', icon: Activity, role: 'moderator' },
     { name: 'admin-catalog', label: 'Catálogo', icon: BookOpen, role: 'admin' },

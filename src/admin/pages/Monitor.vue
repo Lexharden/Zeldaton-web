@@ -7,21 +7,12 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import { actionLabel, ago, hms, localDateTime } from '../format'
 import PageHeader from '../components/PageHeader.vue'
 import RacerControlDialog from '../components/RacerControlDialog.vue'
-import SlotRow from '../components/SlotRow.vue'
 import StatCard from '../components/StatCard.vue'
 import { messageOf, useToasts } from '../composables/useToasts'
-import { slotState } from '../schedule'
 import { useAdminStore } from '../stores/admin'
 import { useMonitorStore } from '../stores/monitor'
 import { useOverviewStore } from '../stores/overview'
-import type {
-  Incident,
-  IncidentKind,
-  IncidentStatus,
-  OverviewRacer,
-  RefereeNote,
-  ScheduleSlot,
-} from '../types'
+import type { Incident, IncidentKind, IncidentStatus, OverviewRacer, RefereeNote } from '../types'
 
 /** Referee monitor: who is playing now, what needs a look, and what happened while nobody was here. */
 const overview = useOverviewStore()
@@ -48,8 +39,6 @@ const KIND_LABEL: Record<IncidentKind, string> = {
   suspicious: 'Progreso sospechoso',
   donation_cap: 'Tope de donaciones',
   exhausted: 'Sin tiempo',
-  no_show: 'No aparece',
-  uncovered: 'Sin árbitro',
 }
 const levelTone = {
   error: 'border-danger/60 text-[#ff8aa0]',
@@ -110,26 +99,6 @@ async function review(i: Incident, status: IncidentStatus) {
 }
 
 const ageOf = (iso: string) => Math.max(0, Math.round((now.value - new Date(iso).getTime()) / 1000))
-
-// ---- schedule: what is on now and next
-const onlineRacer = (id: string) => {
-  const r = racers.value.find((x) => x.racer.id === id)
-  return !!r && (r.connected || !!r.racer.stream?.isLive)
-}
-const agenda = computed<ScheduleSlot[]>(() =>
-  (monitor.data?.slots ?? []).filter((s) => new Date(s.endUtc).getTime() > now.value),
-)
-const slotBusy = ref<number | null>(null)
-async function slotAction(slot: ScheduleSlot, action: 'take' | 'leave') {
-  slotBusy.value = slot.id
-  try {
-    await (action === 'take' ? monitor.takeSlot(slot.id) : monitor.leaveSlot(slot.id))
-  } catch (e) {
-    toasts.error(messageOf(e))
-  } finally {
-    slotBusy.value = null
-  }
-}
 
 // ---- log book
 const noteText = ref('')
@@ -335,28 +304,6 @@ async function markSeen() {
       <p v-if="!sortedRacers.length && overview.data" class="text-sm text-muted">
         Todavía no hay corredores.
       </p>
-    </section>
-
-    <section aria-label="Agenda" class="mb-6">
-      <div class="mb-3 flex items-center justify-between">
-        <h2 class="hud-label">AGENDA</h2>
-        <RouterLink to="/admin/schedule" class="text-xs text-muted hover:text-white"
-          >Ver toda la agenda</RouterLink
-        >
-      </div>
-      <ul v-if="agenda.length" class="space-y-2" data-test="agenda">
-        <SlotRow
-          v-for="s in agenda"
-          :key="s.id"
-          :entry="s"
-          :state="slotState(s, onlineRacer(s.racerId), now)"
-          :user-id="admin.user?.id ?? null"
-          :busy="slotBusy === s.id"
-          @take="slotAction(s, 'take')"
-          @leave="slotAction(s, 'leave')"
-        />
-      </ul>
-      <p v-else class="text-sm text-muted">No hay lives programados en las próximas horas.</p>
     </section>
 
     <section class="panel mb-6" aria-label="Incidentes">

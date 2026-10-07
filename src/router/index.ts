@@ -58,11 +58,6 @@ export const router = createRouter({
           component: () => import('@/admin/pages/Monitor.vue'),
         },
         {
-          path: 'schedule',
-          name: 'admin-schedule',
-          component: () => import('@/admin/pages/Schedule.vue'),
-        },
-        {
           path: 'event',
           name: 'admin-event',
           component: () => import('@/admin/pages/EventPage.vue'),

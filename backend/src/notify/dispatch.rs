@@ -127,7 +127,6 @@ fn snapshot(hub: &AppState, now: DateTime<Utc>) -> Snapshot {
             event_live: s.event_status(now) == EventStatus::Live,
             racers,
             leader,
-            slots: Vec::new(),
         }
     })
 }
@@ -231,11 +230,7 @@ impl Dispatcher {
             let g = gate(&self.hub, Channel::Public, now);
             g.configured && g.event_live && !g.rehearsal && settings.public_enabled
         };
-        let mut snap = snapshot(&self.hub, now);
-        match crate::schedule::around(&self.hub.pool, now).await {
-            Ok(slots) => snap.slots = slots,
-            Err(e) => tracing::warn!(error = %e, "could not read the schedule"),
-        }
+        let snap = snapshot(&self.hub, now);
         for n in self
             .scan
             .scan(&snap, &settings.thresholds, public_open, now)

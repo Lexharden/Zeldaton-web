@@ -86,32 +86,6 @@ pub fn describe(n: &Notice, t: &Thresholds) -> Option<Draft> {
             ),
             payload: json!({ "adding": adding, "limitSeconds": limit_seconds, "viewer": viewer }),
         },
-        Detail::NoShow {
-            slot_id,
-            minutes_late,
-            start,
-        } => Draft {
-            kind: "no_show",
-            severity: "error",
-            message: format!(
-                "{name} no aparece: lleva {minutes_late} min de retraso sobre su horario."
-            ),
-            payload: json!({ "slotId": slot_id, "minutesLate": minutes_late, "startUtc": rfc(*start) }),
-        },
-        Detail::Uncovered {
-            slot_id,
-            starts_in_minutes,
-            start,
-        } => Draft {
-            kind: "uncovered",
-            severity: "warn",
-            message: if *starts_in_minutes > 0 {
-                format!("El live de {name} empieza en {starts_in_minutes} min y no tiene árbitro.")
-            } else {
-                format!("El live de {name} ya empezó y no tiene árbitro.")
-            },
-            payload: json!({ "slotId": slot_id, "startsInMinutes": starts_in_minutes, "startUtc": rfc(*start) }),
-        },
         Detail::Exhausted => Draft {
             kind: "exhausted",
             severity: "info",
@@ -145,19 +119,6 @@ pub async fn record(
     let Some(draft) = describe(n, t) else {
         return Ok(());
     };
-    // Slot alerts are raised once per slot, however long ago and across restarts.
-    if let Some(slot) = draft.payload["slotId"].as_i64() {
-        let seen: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM incidents WHERE kind = ? AND json_extract(payload, '$.slotId') = ? LIMIT 1",
-        )
-        .bind(draft.kind)
-        .bind(slot)
-        .fetch_optional(pool)
-        .await?;
-        if seen.is_some() {
-            return Ok(());
-        }
-    }
     let recent: Option<i64> = sqlx::query_scalar(
         "SELECT id FROM incidents WHERE kind = ? AND racer_id IS ? AND (status = 'open' OR ts > ?) LIMIT 1",
     )

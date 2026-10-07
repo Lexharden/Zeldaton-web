@@ -86,12 +86,10 @@ pub enum Kind {
     Suspicious,
     EventState,
     OrganizerAction,
-    NoShow,
-    Uncovered,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 13] = [
+    pub const ALL: [Kind; 11] = [
         Kind::Live,
         Kind::Winner,
         Kind::Exhausted,
@@ -103,8 +101,6 @@ impl Kind {
         Kind::Suspicious,
         Kind::EventState,
         Kind::OrganizerAction,
-        Kind::NoShow,
-        Kind::Uncovered,
     ];
 
     /// Stable id used in the settings and the API.
@@ -121,8 +117,6 @@ impl Kind {
             Kind::Suspicious => "suspicious",
             Kind::EventState => "event_state",
             Kind::OrganizerAction => "organizer_action",
-            Kind::NoShow => "no_show",
-            Kind::Uncovered => "uncovered",
         }
     }
 
@@ -146,13 +140,8 @@ impl Kind {
             | Kind::Disconnected
             | Kind::LowTime
             | Kind::Suspicious
-            | Kind::NoShow
             | Kind::EventState => Priority::High,
-            Kind::Boss
-            | Kind::Live
-            | Kind::DonationCap
-            | Kind::OrganizerAction
-            | Kind::Uncovered => Priority::Normal,
+            Kind::Boss | Kind::Live | Kind::DonationCap | Kind::OrganizerAction => Priority::Normal,
             Kind::Leader => Priority::Low,
         }
     }
@@ -171,17 +160,12 @@ impl Kind {
             Kind::Suspicious => "Progreso sospechoso (salto brusco)",
             Kind::EventState => "El evento se inicia, pausa, reanuda, finaliza o reinicia",
             Kind::OrganizerAction => "Un organizador actúa sobre un corredor",
-            Kind::NoShow => "Un corredor no aparece a la hora de su live",
-            Kind::Uncovered => "Un live está por empezar y no tiene árbitro asignado",
         }
     }
 
     /// Critical notices may mention the referees' role.
     pub fn critical(self) -> bool {
-        matches!(
-            self,
-            Kind::Disconnected | Kind::LowTime | Kind::Suspicious | Kind::NoShow | Kind::Uncovered
-        )
+        matches!(self, Kind::Disconnected | Kind::LowTime | Kind::Suspicious)
     }
 
     /// The same racer is not notified of this kind again within this time (in addition to the
@@ -243,19 +227,6 @@ pub enum Detail {
         reason: Option<String>,
         detail: Option<String>,
     },
-    /// The racer was due on a schedule slot and is not connected.
-    NoShow {
-        slot_id: i64,
-        minutes_late: i64,
-        start: DateTime<Utc>,
-    },
-    /// A slot starts soon (or has started) and no referee took it.
-    Uncovered {
-        slot_id: i64,
-        /// Negative once it has started.
-        starts_in_minutes: i64,
-        start: DateTime<Utc>,
-    },
 }
 
 impl Detail {
@@ -272,8 +243,6 @@ impl Detail {
             Detail::Jump { .. } => Kind::Suspicious,
             Detail::EventState { .. } => Kind::EventState,
             Detail::Organizer { .. } => Kind::OrganizerAction,
-            Detail::NoShow { .. } => Kind::NoShow,
-            Detail::Uncovered { .. } => Kind::Uncovered,
         }
     }
 }

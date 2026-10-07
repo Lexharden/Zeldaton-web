@@ -7,7 +7,7 @@ import type { Racer } from '@/types/racer'
 import { adminApi, AdminApiError } from '../api/AdminApi'
 import { useToasts } from '../composables/useToasts'
 import { useAdminStore } from '../stores/admin'
-import type { Incident, MonitorData, Overview, ScheduleSlot } from '../types'
+import type { Incident, MonitorData, Overview } from '../types'
 import Monitor from './Monitor.vue'
 
 const racer = (id: string, over: Partial<Racer> = {}): Racer => ({
@@ -92,7 +92,6 @@ const monitorData = (over: Partial<MonitorData> = {}): MonitorData => ({
     donations: 5,
     donationsLimited: 1,
   },
-  slots: [],
   notes: [],
   ...over,
 })
@@ -190,33 +189,6 @@ describe('Monitor', () => {
     )
     const wrapper = await mountPage()
     expect(wrapper.text()).toContain('No se pudo conectar')
-  })
-
-  it('shows the schedule with who referees each slot and lets a referee take one', async () => {
-    const soon = new Date(Date.now() + 3600_000).toISOString()
-    const later = new Date(Date.now() + 2 * 3600_000).toISOString()
-    const slot: ScheduleSlot = {
-      id: 3,
-      racerId: 'cuaco',
-      racerName: 'CUACO',
-      racerTimezone: 'America/Mexico_City',
-      startUtc: soon,
-      endUtc: later,
-      note: 'Parte 1',
-      assignees: [],
-    }
-    const take = vi.spyOn(adminApi, 'takeSlot').mockResolvedValue({ ok: true })
-    vi.spyOn(adminApi, 'monitor').mockResolvedValue(monitorData({ slots: [slot] }))
-    const wrapper = await mountPage()
-    const row = wrapper.find('[data-test="agenda"] [data-slot="3"]')
-    expect(row.text()).toContain('CUACO')
-    expect(row.text()).toContain('Sin árbitro')
-    expect(row.text()).toContain('Próximo')
-    await row
-      .findAll('button')
-      .find((b) => b.text() === 'Tomar')!
-      .trigger('click')
-    expect(take).toHaveBeenCalledWith(3)
   })
 
   it('keeps a log book: anyone writes, only the author or an admin deletes', async () => {

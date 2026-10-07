@@ -158,8 +158,6 @@ export interface DiscordThresholds {
   lowTimeMinutes: number
   jumpPercent: number
   jumpWindowSeconds: number
-  noShowMinutes: number
-  uncoveredLeadMinutes: number
 }
 
 /** State of the Discord notifications. */
@@ -232,14 +230,7 @@ export interface UserRow extends AdminUser {
 
 // ---- referee monitor
 
-export type IncidentKind =
-  | 'disconnected'
-  | 'low_time'
-  | 'suspicious'
-  | 'donation_cap'
-  | 'exhausted'
-  | 'no_show'
-  | 'uncovered'
+export type IncidentKind = 'disconnected' | 'low_time' | 'suspicious' | 'donation_cap' | 'exhausted'
 export type IncidentStatus = 'open' | 'reviewed' | 'dismissed'
 
 export interface Incident {
@@ -276,21 +267,8 @@ export interface MonitorData {
   /** `null` the first time this referee opens the monitor. */
   lastSeenUtc: string | null
   catchUp: CatchUp
-  /** Schedule slots from 6 hours ago to 36 hours ahead. */
-  slots: ScheduleSlot[]
   /** Latest log book notes, newest first. */
   notes: RefereeNote[]
-}
-
-export interface ScheduleSlot {
-  id: number
-  racerId: string
-  racerName: string
-  racerTimezone: string
-  startUtc: string
-  endUtc: string
-  note: string | null
-  assignees: { userId: number; username: string }[]
 }
 
 export interface RefereeNote {
@@ -299,11 +277,4 @@ export interface RefereeNote {
   racerId: string | null
   author: string
   text: string
-}
-
-export interface SlotInput {
-  racerId?: string
-  startUtc: string
-  endUtc: string
-  note?: string
 }

@@ -10,7 +10,6 @@ use chrono::{DateTime, Utc};
 use super::settings::Thresholds;
 use super::{Detail, LiveInfo, Notice};
 use crate::domain::RacerStatus;
-use crate::schedule::SlotSnap;
 
 /// A racer must stay live this long before the announcement (short reconnects are not "going live").
 pub const LIVE_AFTER: Duration = Duration::from_secs(30);
@@ -110,8 +109,6 @@ pub struct Snapshot {
     pub racers: Vec<RacerSnap>,
     /// First place, only when the lead is meaningful (someone progressed and nobody has won yet).
     pub leader: Option<String>,
-    /// Schedule slots around now (loaded by the dispatcher).
-    pub slots: Vec<SlotSnap>,
 }
 
 // ---- the scanner -------------------------------------------------------------------------------
@@ -131,7 +128,6 @@ pub struct ScanState {
     seen_connected: HashSet<String>,
     disconnect_alerted: HashSet<String>,
     low_alerted: HashSet<String>,
-    slot_alerted: HashSet<String>,
 }
 
 impl ScanState {
@@ -287,59 +283,6 @@ impl ScanState {
                 }
             }
         }
-        out.extend(self.scan_slots(snap, t, now));
-        out
-    }
-
-    /// A slot that starts without a referee, and a racer who does not show up for theirs. Each is
-    /// raised once per slot.
-    fn scan_slots(&mut self, snap: &Snapshot, t: &Thresholds, now: DateTime<Utc>) -> Vec<Notice> {
-        let mut out = Vec::new();
-        for slot in &snap.slots {
-            let Some(r) = snap.racers.iter().find(|r| r.info.id == slot.racer_id) else {
-                continue;
-            };
-            if now >= slot.end {
-                continue;
-            }
-            let to_start = (slot.start - now).num_minutes();
-            if slot.assignees == 0 && to_start <= t.uncovered_lead_minutes {
-                let key = format!("uncovered:{}", slot.id);
-                if self.slot_alerted.insert(key.clone()) {
-                    out.push(
-                        Notice::new(
-                            Some(r.info.clone()),
-                            Detail::Uncovered {
-                                slot_id: slot.id,
-                                starts_in_minutes: to_start,
-                                start: slot.start,
-                            },
-                            now,
-                        )
-                        .keyed(key),
-                    );
-                }
-            }
-            let late = (now - slot.start).num_minutes();
-            let out_of_play = matches!(r.status, RacerStatus::Finished | RacerStatus::Exhausted);
-            if late >= t.no_show_minutes && !r.connected && !r.is_live && !out_of_play {
-                let key = format!("noshow:{}", slot.id);
-                if self.slot_alerted.insert(key.clone()) {
-                    out.push(
-                        Notice::new(
-                            Some(r.info.clone()),
-                            Detail::NoShow {
-                                slot_id: slot.id,
-                                minutes_late: late,
-                                start: slot.start,
-                            },
-                            now,
-                        )
-                        .keyed(key),
-                    );
-                }
-            }
-        }
         out
     }
 }
@@ -404,7 +347,6 @@ mod tests {
             event_live: true,
             racers,
             leader: leader.map(str::to_string),
-            slots: Vec::new(),
         }
     }
     fn racer(id: &str) -> RacerSnap {
@@ -639,67 +581,5 @@ mod tests {
         // Same picture after the restart: no "went live", no "took the lead".
         assert!(s.scan(&sn, &th, true, t(5)).is_empty());
         assert!(s.scan(&sn, &th, true, t(100)).is_empty());
-    }
-
-    // ---- schedule slots
-
-    fn slot(id: i64, racer: &str, start: i64, end: i64, assignees: usize) -> SlotSnap {
-        SlotSnap {
-            id,
-            racer_id: racer.into(),
-            start: t(start),
-            end: t(end),
-            assignees,
-        }
-    }
-
-    #[test]
-    fn a_slot_without_a_referee_is_flagged_once_shortly_before_it_starts() {
-        let th = Thresholds::default(); // 30 minutes ahead
-        let mut s = ScanState::default();
-        let mut sn = snap(vec![racer("ana")], None);
-        sn.slots = vec![
-            slot(1, "ana", 3 * 3600, 6 * 3600, 0),
-            slot(2, "ana", 0, 100, 1),
-        ];
-        // Too early: it starts in 3 hours.
-        assert!(s.scan(&sn, &th, false, t(0)).is_empty());
-        // Within the lead time: one alert, then silence.
-        let n = s.scan(&sn, &th, false, t(3 * 3600 - 20 * 60));
-        assert_eq!(kinds(&n), ["Uncovered"]);
-        assert_eq!(n[0].dedupe.as_deref(), Some("uncovered:1"));
-        assert!(s.scan(&sn, &th, false, t(3 * 3600 - 10 * 60)).is_empty());
-        // A covered slot never alerts.
-        sn.slots = vec![slot(3, "ana", 3 * 3600, 6 * 3600, 2)];
-        assert!(s.scan(&sn, &th, false, t(3 * 3600 - 10 * 60)).is_empty());
-    }
-
-    #[test]
-    fn a_racer_who_does_not_show_up_for_their_slot_is_flagged_once() {
-        let th = Thresholds::default(); // 10 minutes late
-        let mut s = ScanState::default();
-        let mut gone = racer("ana");
-        gone.connected = false;
-        gone.played = false;
-        gone.status = RacerStatus::Offline;
-        let mut sn = snap(vec![gone.clone()], None);
-        sn.slots = vec![slot(1, "ana", 0, 3600, 1)];
-        assert!(
-            s.scan(&sn, &th, false, t(5 * 60)).is_empty(),
-            "grace period"
-        );
-        let n = s.scan(&sn, &th, false, t(11 * 60));
-        assert_eq!(kinds(&n), ["NoShow"]);
-        assert!(
-            s.scan(&sn, &th, false, t(20 * 60)).is_empty(),
-            "once per slot"
-        );
-        // Showing up in time, or slot already over, is not a no-show.
-        let mut s = ScanState::default();
-        sn.racers = vec![racer("ana")];
-        assert!(s.scan(&sn, &th, false, t(11 * 60)).is_empty());
-        let mut s = ScanState::default();
-        sn.racers = vec![gone];
-        assert!(s.scan(&sn, &th, false, t(2 * 3600)).is_empty());
     }
 }

@@ -67,16 +67,6 @@ export const useMonitorStore = defineStore('monitor', () => {
     await refresh()
   }
 
-  /** The referee takes ("I will watch this one") or leaves a schedule slot. */
-  async function takeSlot(id: number) {
-    await adminApi.takeSlot(id)
-    await refresh()
-  }
-  async function leaveSlot(id: number) {
-    await adminApi.leaveSlot(id)
-    await refresh()
-  }
-
   async function addNote(text: string, racerId?: string) {
     await adminApi.addNote(text, racerId)
     await refresh()
@@ -95,8 +85,6 @@ export const useMonitorStore = defineStore('monitor', () => {
     stop,
     review,
     markSeen,
-    takeSlot,
-    leaveSlot,
     addNote,
     deleteNote,
   }
