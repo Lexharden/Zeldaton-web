@@ -305,7 +305,11 @@ fn rest_payloads_match_their_fixtures() {
     );
     check(
         "rest/standings.json",
-        serde_json::to_value(zeldathon_server::standings::compute(&state.views(later))).unwrap(),
+        serde_json::to_value(zeldathon_server::standings::compute(
+            &state.views(later),
+            &state.event.rules.required_objective_ids,
+        ))
+        .unwrap(),
     );
     check(
         "rest/clock.json",

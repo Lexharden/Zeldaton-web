@@ -127,7 +127,8 @@ export const es = {
   standings: {
     eyebrow: 'LA CLASIFICACIÓN',
     title: 'POSICIONES EN VIVO',
-    subtitle: 'La carrera cambia en tiempo real.',
+    subtitle:
+      'La carrera cambia en tiempo real. Va delante quien tiene más objetivos requeridos y más avance; las donaciones no mueven la tabla.',
     open: 'ABRIR CARRERA EN VIVO',
     rank: 'POS.',
     racer: 'CORREDOR',
@@ -330,6 +331,10 @@ export const es = {
       },
     },
     faq: [
+      {
+        q: '¿Cómo se ordena la clasificación?',
+        a: 'Primero quienes terminaron, en el orden en que cruzaron la meta (el primero gana). Después, quien tiene más objetivos requeridos completados; si empatan, el mayor porcentaje de avance; luego más ítems; luego quien llegó antes a ese punto y, por último, quien ha jugado menos tiempo. Las donaciones que suman o restan tiempo no cambian las posiciones.',
+      },
       {
         q: '¿Qué es Zeldatón?',
         a: 'Una carrera comunitaria en vivo donde streamers juegan una versión modificada de Ocarina of Time y compiten por llegar primero a la meta.',

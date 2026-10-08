@@ -1,0 +1,88 @@
+{
+  "note": "Golden cases for the ranking. backend/src/standings.rs and src/utils/standings.ts both read this file and must produce `order` for every case (the racers also reversed). Fields per racer: id, status (default live), objectives (ids), progress (%), items (count), milestoneAt (when they reached their current number of objectives), played (seconds really played), finishedAt, finalTime (seconds played at the finish), elapsed (daily budget minus what is left: donations move it, the ranking ignores it).",
+  "cases": [
+    {
+      "name": "required objectives come first and extra ones do not count",
+      "required": ["r1", "r2", "r3"],
+      "racers": [
+        { "id": "extras", "objectives": ["x1", "x2", "x3", "x4"], "progress": 60 },
+        { "id": "required", "objectives": ["r1"], "progress": 10 }
+      ],
+      "order": ["required", "extras"]
+    },
+    {
+      "name": "more objectives beat more progress",
+      "required": ["r1", "r2"],
+      "racers": [
+        { "id": "far", "objectives": ["r1"], "progress": 80 },
+        { "id": "deep", "objectives": ["r1", "r2"], "progress": 40 }
+      ],
+      "order": ["deep", "far"]
+    },
+    {
+      "name": "same objectives: progress, compared in tenths",
+      "required": ["r1"],
+      "racers": [
+        { "id": "a", "objectives": ["r1"], "progress": 41.64 },
+        { "id": "b", "objectives": ["r1"], "progress": 41.66 },
+        { "id": "c", "objectives": ["r1"], "progress": 41.6 }
+      ],
+      "order": ["b", "a", "c"]
+    },
+    {
+      "name": "same objectives and progress: more items, then who got there first",
+      "required": ["r1"],
+      "racers": [
+        { "id": "late", "objectives": ["r1"], "progress": 20, "items": 3, "milestoneAt": "2026-10-07T15:00:00Z" },
+        { "id": "early", "objectives": ["r1"], "progress": 20, "items": 3, "milestoneAt": "2026-10-07T13:00:00Z" },
+        { "id": "rich", "objectives": ["r1"], "progress": 20, "items": 5, "milestoneAt": "2026-10-07T18:00:00Z" },
+        { "id": "nomilestone", "objectives": ["r1"], "progress": 20, "items": 3 }
+      ],
+      "order": ["rich", "early", "late", "nomilestone"]
+    },
+    {
+      "name": "everything equal: less time really played, then id",
+      "required": ["r1"],
+      "racers": [
+        { "id": "zed", "progress": 5, "played": 600 },
+        { "id": "ana", "progress": 5, "played": 900 },
+        { "id": "bea", "progress": 5, "played": 600 }
+      ],
+      "order": ["bea", "zed", "ana"]
+    },
+    {
+      "name": "donations and time adjustments never decide: elapsed is ignored",
+      "required": ["r1"],
+      "racers": [
+        { "id": "lost-an-hour", "progress": 30, "elapsed": 9000 },
+        { "id": "gained-an-hour", "progress": 30, "elapsed": 100 }
+      ],
+      "order": ["gained-an-hour", "lost-an-hour"]
+    },
+    {
+      "name": "the first to cross the line is first, even with more time played",
+      "required": ["r1"],
+      "racers": [
+        { "id": "second", "status": "finished", "objectives": ["r1"], "progress": 100, "finishedAt": "2026-10-08T10:00:00Z", "finalTime": 9000 },
+        { "id": "first", "status": "finished", "objectives": ["r1"], "progress": 100, "finishedAt": "2026-10-07T20:00:00Z", "finalTime": 14000 },
+        { "id": "racing", "objectives": ["r1"], "progress": 99 }
+      ],
+      "order": ["first", "second", "racing"]
+    },
+    {
+      "name": "finished at the same moment: less time played",
+      "required": ["r1"],
+      "racers": [
+        { "id": "slow", "status": "finished", "finishedAt": "2026-10-07T20:00:00Z", "finalTime": 9000 },
+        { "id": "quick", "status": "finished", "finishedAt": "2026-10-07T20:00:00Z", "finalTime": 8000 }
+      ],
+      "order": ["quick", "slow"]
+    },
+    {
+      "name": "nobody has started: ordered by id",
+      "required": ["r1"],
+      "racers": [{ "id": "c" }, { "id": "a" }, { "id": "b" }],
+      "order": ["a", "b", "c"]
+    }
+  ]
+}

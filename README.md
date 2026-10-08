@@ -118,6 +118,14 @@ until they accept (Consent Mode v2, script injected only after consent), rejecti
 Global Privacy Control counts as a rejection, and `/admin` is never tracked. Page views are sent on every SPA
 navigation. The policy lives at `/privacy` (and terms at `/terms`); "Cookie settings" in the footer reopens the notice.
 
+### How the standings are decided
+
+Finished racers first, in the order they crossed the line (the first one is the winner), then by less time really played.
+Racing: more **required** objectives completed → higher progress (tenths of a percent) → more items → reached that number
+of objectives earlier → less time really played → id. Donations and time adjustments never move anybody. The order lives in
+`backend/src/standings.rs` and `src/utils/standings.ts`, and `contract/standings-cases.json` is read by both test suites so
+they cannot drift apart. In `/admin → Panel` hover a racer's `#position` to see the values being compared.
+
 ### Discord notifications
 
 Two channels, each with its own webhook (no bot needed). Switch each one on, and choose which notices it gets, in

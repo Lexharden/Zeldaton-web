@@ -399,6 +399,7 @@ impl RaceState {
             stats: r.racer.stats.clone().unwrap_or_default(),
             finished_at: r.racer.finished_at_utc.clone(),
             final_time_seconds: r.racer.final_time_seconds,
+            milestone_at: r.racer.milestone_at_utc.clone(),
             last_heartbeat_at: r.last_heartbeat,
             stream: r.racer.stream.clone().unwrap_or_default(),
             donation_added_ms: r.donation_added_ms,
@@ -639,6 +640,12 @@ impl RaceState {
                     r.current_objective = Some(o.clone());
                 }
                 if let Some(c) = &patch.completed_objectives {
+                    let required = &self.event.rules.required_objective_ids;
+                    let count =
+                        |list: &[String]| list.iter().filter(|id| required.contains(id)).count();
+                    if count(c) != count(&r.completed_objectives) {
+                        r.milestone_at_utc = Some(iso(now));
+                    }
                     r.completed_objectives = c.clone();
                 }
                 fx.touch(i);
@@ -1644,6 +1651,7 @@ impl RaceState {
             r.racer.completed_objectives.clear();
             r.racer.finished_at_utc = None;
             r.racer.final_time_seconds = None;
+            r.racer.milestone_at_utc = None;
             r.racer.stats = Some(RacerStats::default());
             r.racer.items.clear();
             fx.touch(i);
@@ -1695,6 +1703,7 @@ impl RaceState {
             completed_objectives: vec![],
             finished_at_utc: None,
             final_time_seconds: None,
+            milestone_at_utc: None,
             channels,
             stream: Some(StreamState::default()),
             stats: Some(RacerStats::default()),

@@ -75,6 +75,11 @@ export const useRacersStore = defineStore('racers', () => {
     if (racer) {
       racer.status = clock.status
       racer.remainingSeconds = Math.round(clock.remainingMs / 1000)
+      // The tie-break "less time really played" needs live values, not the ones from the last REST load.
+      if (clock.playedTotalMs !== undefined)
+        racer.playedSeconds = Math.floor(clock.playedTotalMs / 1000)
+      if (clock.playedTodayMs !== undefined)
+        racer.playedTodaySeconds = Math.floor(clock.playedTodayMs / 1000)
     }
   }
 

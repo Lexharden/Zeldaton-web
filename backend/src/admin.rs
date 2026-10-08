@@ -664,6 +664,14 @@ async fn overview(State(hub): State<AppState>) -> Json<Value> {
     }
 
     let count = |status: RacerStatus| rows.iter().filter(|r| r.0.status == status).count();
+    // Why each racer is where they are: the position and the values the ranking compares.
+    let required = hub.read(|s| s.event.rules.required_objective_ids.clone());
+    let views: Vec<Racer> = rows.iter().map(|r| r.0.clone()).collect();
+    let ranks: std::collections::HashMap<String, u32> =
+        crate::standings::compute(&views, &required)
+            .into_iter()
+            .map(|s| (s.racer_id, s.rank))
+            .collect();
     let racers: Vec<Value> = rows
         .iter()
         .map(|(racer, connected, hb, age)| {
@@ -672,6 +680,14 @@ async fn overview(State(hub): State<AppState>) -> Json<Value> {
                 "connected": connected,
                 "lastHeartbeatUtc": hb,
                 "heartbeatAgeSeconds": age,
+                "rank": ranks.get(&racer.id),
+                "rankKey": {
+                    "requiredDone": crate::standings::required_done(racer, &required),
+                    "progressPercent": crate::standings::progress_tenths(racer.progress_percentage) as f64 / 10.0,
+                    "items": crate::standings::items_owned(racer),
+                    "milestoneAtUtc": racer.milestone_at_utc,
+                    "playedSeconds": racer.played_seconds,
+                },
             })
         })
         .collect();

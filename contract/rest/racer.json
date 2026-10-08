@@ -23,6 +23,7 @@
   "items": {
     "longshot": true
   },
+  "milestoneAtUtc": "2026-10-07T13:00:00.000Z",
   "playedSeconds": 60,
   "playedTodaySeconds": 60,
   "progressPercentage": 76.0,

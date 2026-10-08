@@ -28,8 +28,20 @@ export interface LoginResponse {
   expiresAtUtc: string
 }
 
+/** The values the ranking compares, so a referee can see why somebody is ahead. */
+export interface RankKey {
+  requiredDone: number
+  progressPercent: number
+  items: number
+  milestoneAtUtc?: string | null
+  playedSeconds: number
+}
+
 export interface OverviewRacer {
   racer: Racer
+  /** Position in the standings (1 = leads). */
+  rank?: number | null
+  rankKey?: RankKey
   connected: boolean
   lastHeartbeatUtc: string | null
   heartbeatAgeSeconds: number | null

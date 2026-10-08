@@ -32,6 +32,22 @@ onBeforeUnmount(() => {
 })
 
 const controlled = ref<OverviewRacer | null>(null)
+
+/** Why this racer is where they are: the values the ranking compares, in order. */
+function rankWhy(row: OverviewRacer): string {
+  const k = row.rankKey
+  if (!k) return ''
+  if (row.racer.status === 'finished')
+    return `Terminó el juego${row.racer.finishedAtUtc ? ` · ${localDateTime(row.racer.finishedAtUtc)}` : ''}. Ordena quien cruzó la meta primero.`
+  return [
+    `Objetivos requeridos: ${k.requiredDone}`,
+    `Progreso: ${k.progressPercent}%`,
+    `Ítems: ${k.items}`,
+    `Llegó a ese punto: ${k.milestoneAtUtc ? localDateTime(k.milestoneAtUtc) : 'aún no'}`,
+    `Tiempo jugado: ${hms(k.playedSeconds)}`,
+    'Las donaciones no cuentan.',
+  ].join('\n')
+}
 const summary = computed(() => data.value?.summary)
 const winnerName = computed(() => {
   const w = data.value?.winner
@@ -189,6 +205,13 @@ const levelTone = {
                     >{{ row.racer.displayName }}</RouterLink
                   >
                   <div class="text-xs text-muted">{{ row.racer.id }}</div>
+                  <div
+                    v-if="row.rank"
+                    class="num mt-0.5 inline-block cursor-help text-xs font-semibold text-gold"
+                    :title="rankWhy(row)"
+                  >
+                    #{{ row.rank }}
+                  </div>
                 </td>
                 <td><LiveBadge :status="row.racer.status" size="sm" /></td>
                 <td>

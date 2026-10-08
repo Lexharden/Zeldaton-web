@@ -1394,3 +1394,88 @@ fn closing_the_game_or_running_out_of_time_says_how_long_they_played() {
         1
     );
 }
+
+// ---- ranking milestone ---------------------------------------------------------------------------
+
+#[test]
+fn the_milestone_moves_only_when_the_count_of_required_objectives_changes() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let i = s.idx("ralbat").unwrap();
+    let done = |ids: &[&str]| IngestMsg::GameProgress {
+        progress: GameProgressPatch {
+            completed_objectives: Some(ids.iter().map(|s| s.to_string()).collect()),
+            ..Default::default()
+        },
+    };
+    let at = |secs: i64| t0() + Duration::seconds(secs);
+    assert!(s.view(i, at(0)).milestone_at_utc.is_none());
+    // Reaching a first required objective sets it.
+    ingest(&mut s, "ralbat", done(&["kokiri-forest"]), at(10)).unwrap();
+    let first = s.view(i, at(10)).milestone_at_utc.unwrap();
+    // Re-reporting the same list, or only progress, does not move it...
+    ingest(&mut s, "ralbat", done(&["kokiri-forest"]), at(20)).unwrap();
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::GameProgress {
+            progress: GameProgressPatch {
+                percentage: Some(33.0),
+                ..Default::default()
+            },
+        },
+        at(25),
+    )
+    .unwrap();
+    assert_eq!(s.view(i, at(30)).milestone_at_utc.unwrap(), first);
+    // ...and neither does an objective the event does not require.
+    let extra = zeldathon_server::catalog::default_catalog()
+        .objectives
+        .iter()
+        .map(|o| o.id.clone())
+        .find(|id| !s.event.rules.required_objective_ids.contains(id));
+    if let Some(extra) = extra {
+        ingest(&mut s, "ralbat", done(&["kokiri-forest", &extra]), at(40)).unwrap();
+        assert_eq!(s.view(i, at(40)).milestone_at_utc.unwrap(), first);
+    }
+    // A second required objective moves it.
+    ingest(
+        &mut s,
+        "ralbat",
+        done(&["kokiri-forest", "deku-tree"]),
+        at(50),
+    )
+    .unwrap();
+    assert_ne!(s.view(i, at(50)).milestone_at_utc.unwrap(), first);
+}
+
+#[test]
+fn the_milestone_is_saved_and_a_reset_clears_it() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let patch = GameProgressPatch {
+        completed_objectives: Some(vec!["kokiri-forest".into()]),
+        ..Default::default()
+    };
+    let (fx, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::GameProgress { progress: patch },
+        t0(),
+    )
+    .unwrap();
+    let saved = fx
+        .ops
+        .iter()
+        .find_map(|op| match op {
+            zeldathon_server::db::PersistOp::RacerState(row) => row.milestone_at.clone(),
+            _ => None,
+        })
+        .expect("the racer row carries the milestone");
+    assert!(saved.starts_with("2026-10-07T13:00:00"));
+    s.event.rehearsal = true;
+    s.reset_event(Some("2026-12-01T12:00:00Z".into()), true, t0())
+        .unwrap();
+    let i = s.idx("ralbat").unwrap();
+    assert!(s.view(i, t0()).milestone_at_utc.is_none());
+}

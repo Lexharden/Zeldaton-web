@@ -50,6 +50,7 @@ pub struct RacerStateRow {
     pub stats: RacerStats,
     pub finished_at: Option<String>,
     pub final_time_seconds: Option<i64>,
+    pub milestone_at: Option<String>,
     pub last_heartbeat_at: Option<DateTime<Utc>>,
     pub stream: StreamState,
     pub donation_added_ms: i64,
@@ -157,13 +158,13 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
         }
         PersistOp::RacerState(r) => {
             sqlx::query(
-                "INSERT INTO racer_state (racer_id,status,remaining_ms,checkpoint_at,reset_at,played_ms_total,played_today_ms,progress_pct,current_area,current_objective,completed_objectives,items,stats,finished_at,final_time_seconds,last_heartbeat_at,stream_live,viewers,thumbnail_url,donation_added_ms,donation_removed_ms)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                "INSERT INTO racer_state (racer_id,status,remaining_ms,checkpoint_at,reset_at,played_ms_total,played_today_ms,progress_pct,current_area,current_objective,completed_objectives,items,stats,finished_at,final_time_seconds,milestone_at,last_heartbeat_at,stream_live,viewers,thumbnail_url,donation_added_ms,donation_removed_ms)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                  ON CONFLICT(racer_id) DO UPDATE SET status=excluded.status, remaining_ms=excluded.remaining_ms, checkpoint_at=excluded.checkpoint_at,
                    reset_at=excluded.reset_at, played_ms_total=excluded.played_ms_total, played_today_ms=excluded.played_today_ms, progress_pct=excluded.progress_pct,
                    current_area=excluded.current_area, current_objective=excluded.current_objective,
                    completed_objectives=excluded.completed_objectives, items=excluded.items, stats=excluded.stats,
-                   finished_at=excluded.finished_at, final_time_seconds=excluded.final_time_seconds,
+                   finished_at=excluded.finished_at, final_time_seconds=excluded.final_time_seconds, milestone_at=excluded.milestone_at,
                    last_heartbeat_at=excluded.last_heartbeat_at, stream_live=excluded.stream_live,
                    viewers=excluded.viewers, thumbnail_url=excluded.thumbnail_url,
                    donation_added_ms=excluded.donation_added_ms, donation_removed_ms=excluded.donation_removed_ms",
@@ -183,6 +184,7 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
             .bind(serde_json::to_string(&r.stats).unwrap_or_default())
             .bind(&r.finished_at)
             .bind(r.final_time_seconds)
+            .bind(&r.milestone_at)
             .bind(r.last_heartbeat_at.map(rfc))
             .bind(r.stream.is_live)
             .bind(r.stream.viewers)
@@ -501,7 +503,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT r.*, s.status, s.remaining_ms, s.checkpoint_at, s.reset_at, s.played_ms_total, s.played_today_ms, s.progress_pct,
                 s.current_area, s.current_objective, s.completed_objectives, s.items, s.stats, s.finished_at,
-                s.final_time_seconds, s.last_heartbeat_at, s.stream_live, s.viewers, s.thumbnail_url,
+                s.final_time_seconds, s.milestone_at, s.last_heartbeat_at, s.stream_live, s.viewers, s.thumbnail_url,
                 s.donation_added_ms, s.donation_removed_ms
          FROM racers r JOIN racer_state s ON s.racer_id = r.id ORDER BY r.sort_order, r.display_name",
     )
@@ -532,6 +534,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
                 .unwrap_or_default(),
             finished_at_utc: r.get("finished_at"),
             final_time_seconds: r.get("final_time_seconds"),
+            milestone_at_utc: r.get("milestone_at"),
             channels: channels.remove(&id).unwrap_or_default(),
             stream: Some(StreamState {
                 is_live: r.get::<i64, _>("stream_live") != 0,

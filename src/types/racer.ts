@@ -51,6 +51,8 @@ export interface Racer {
   completedObjectives: string[]
   finishedAtUtc?: string
   finalTimeSeconds?: number
+  /** When the racer last changed their count of completed required objectives (ranking tie-break). */
+  milestoneAtUtc?: string
 
   /** All channels; may be empty. Twitch is preferred as the primary one. */
   channels: RacerChannel[]

@@ -128,7 +128,8 @@ export const en: Messages = {
   standings: {
     eyebrow: 'THE RANKING',
     title: 'LIVE STANDINGS',
-    subtitle: 'The race changes in real time.',
+    subtitle:
+      'The race changes in real time. Whoever has more required objectives and more progress is ahead; donations never move the table.',
     open: 'OPEN LIVE RACE',
     rank: 'RANK',
     racer: 'RACER',
@@ -331,6 +332,10 @@ export const en: Messages = {
       },
     },
     faq: [
+      {
+        q: 'How is the ranking decided?',
+        a: 'First those who finished, in the order they crossed the line (the first one wins). Then whoever has more required objectives completed; on a tie, the higher progress; then more items; then whoever reached that point earlier and, last, whoever has played less time. Donations that add or remove time never change the positions.',
+      },
       {
         q: 'What is Zeldatón?',
         a: 'A live community race where streamers play a modified Ocarina of Time and compete to reach the finish line first.',

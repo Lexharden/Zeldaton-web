@@ -60,7 +60,9 @@ async fn racer(
 }
 
 async fn standings_route(State(hub): State<AppState>) -> Json<Vec<StandingEntry>> {
-    Json(standings::compute(&hub.racers(Utc::now())))
+    let now = Utc::now();
+    let required = hub.read(|s| s.event.rules.required_objective_ids.clone());
+    Json(standings::compute(&hub.racers(now), &required))
 }
 
 async fn streams(State(hub): State<AppState>) -> Json<Vec<StreamInfo>> {

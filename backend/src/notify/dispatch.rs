@@ -103,7 +103,7 @@ fn snapshot(hub: &AppState, now: DateTime<Utc>) -> Snapshot {
         let leader = if s.winner.is_some() {
             None
         } else {
-            standings::compute(&views)
+            standings::compute(&views, &s.event.rules.required_objective_ids)
                 .first()
                 .and_then(|top| views.iter().find(|r| r.id == top.racer_id))
                 .filter(|r| r.progress_percentage > 0.0 || !r.completed_objectives.is_empty())

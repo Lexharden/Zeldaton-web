@@ -4,10 +4,12 @@ import { raceApi } from '@/services/api'
 import type { FinishInfo, StandingEntry, StreamInfo } from '@/types/race'
 import { computeStandings } from '@/utils/standings'
 import { errorMessage } from '@/utils/errors'
+import { useEventStore } from './event'
 import { useRacersStore } from './racers'
 
 export const useRaceStore = defineStore('race', () => {
   const racers = useRacersStore()
+  const event = useEventStore()
 
   const serverStandings = ref<StandingEntry[]>([])
   const streams = ref<StreamInfo[]>([])
@@ -18,11 +20,13 @@ export const useRaceStore = defineStore('race', () => {
   const error = ref<string | null>(null)
 
   /**
-   * Standings are derived from racer progress, not from the clock, so a 1s tick never
+   * Standings are derived from racer progress, not from the clock or donations, so a 1s tick never
    * recomputes them. Server-provided standings only seed the order before racers arrive.
    */
   const standings = computed<StandingEntry[]>(() =>
-    racers.list.length ? computeStandings(racers.list) : serverStandings.value,
+    racers.list.length
+      ? computeStandings(racers.list, event.info?.rules.requiredObjectiveIds)
+      : serverStandings.value,
   )
   const rankOf = computed(() => Object.fromEntries(standings.value.map((s) => [s.racerId, s.rank])))
   const leader = computed(() => racers.getById(standings.value[0]?.racerId ?? ''))

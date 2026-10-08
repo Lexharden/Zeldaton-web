@@ -324,6 +324,9 @@ pub struct Racer {
     pub finished_at_utc: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub final_time_seconds: Option<i64>,
+    /// When the racer last changed their count of completed required objectives (ranking tie-break).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone_at_utc: Option<String>,
     pub channels: Vec<Channel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<StreamState>,
