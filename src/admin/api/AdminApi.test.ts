@@ -269,4 +269,12 @@ describe('AdminApi', () => {
     expect(body.donationTime.secondsPerDiamond).toBe(3)
     expect(body.donationTime.secondsPerBit).toBeNull()
   })
+
+  it('reads the day by day statistics', async () => {
+    const { fetcher, calls } = fakeFetch([{ body: { days: ['2026-10-07'], rows: [] } }])
+    const api = new AdminApi('/api/admin', fetcher)
+    const out = await api.statsDays()
+    expect(out.days).toEqual(['2026-10-07'])
+    expect(calls[0].url).toBe('/api/admin/stats/days')
+  })
 })

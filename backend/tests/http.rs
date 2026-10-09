@@ -2506,3 +2506,130 @@ async fn the_log_book_is_written_by_referees_and_cleaned_up_by_its_author() {
     let (_, notes) = call(&h, "GET", "/api/admin/notes", Some(ADMIN), None).await;
     assert!(notes.as_array().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn the_day_by_day_statistics_are_served_to_the_panel_and_to_the_public_without_internals() {
+    let h = harness().await;
+    make_event_live(&h).await;
+    let mut hs = connect_ws(&h, "/ingest", Some(&h.token("cuaco")))
+        .await
+        .unwrap();
+    send(&mut hs, json!({ "type": "HELLO" })).await;
+    wait_for(&mut hs, "CLOCK").await;
+    send(&mut hs, json!({ "type": "SESSION_STARTED" })).await;
+    send(
+        &mut hs,
+        json!({ "type": "ITEM_ACQUIRED", "item": "longshot" }),
+    )
+    .await;
+    send(
+        &mut hs,
+        json!({ "type": "BOSS_DEFEATED", "boss": "gohma", "id": "b1" }),
+    )
+    .await;
+    send(
+        &mut hs,
+        json!({ "type": "GAME_PROGRESS", "progress": { "percentage": 8.0 } }),
+    )
+    .await;
+    send(&mut hs, json!({ "type": "TIME_DONATION", "id": "d1", "deltaSeconds": -1,
+        "source": { "platform": "tiktok", "currency": "diamonds", "amount": 10, "viewer": "fan" } })).await;
+    wait_for(&mut hs, "TIME_APPLIED").await;
+    call(
+        &h,
+        "POST",
+        "/api/admin/racers/cuaco/actions/adjust-time",
+        Some(ADMIN),
+        Some(json!({ "deltaSeconds": 60, "reason": "lag" })),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(1200)).await; // let the game run and the writer catch up
+
+    let (s, _) = call(&h, "GET", "/api/admin/stats/days", None, None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, stats) = call(&h, "GET", "/api/admin/stats/days", Some(ADMIN), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(!stats["days"].as_array().unwrap().is_empty());
+    let row = stats["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["racerId"] == "cuaco")
+        .expect("cuaco has a row");
+    assert_eq!(row["racerName"], "Cuaco");
+    assert_eq!(
+        (
+            row["sessions"].clone(),
+            row["items"].clone(),
+            row["bosses"].clone()
+        ),
+        (json!(1), json!(1), json!(1))
+    );
+    assert_eq!(
+        (
+            row["donations"].clone(),
+            row["diamonds"].clone(),
+            row["donationRemovedSeconds"].clone()
+        ),
+        (json!(1), json!(10), json!(30))
+    );
+    assert_eq!(row["adjustSeconds"], 60);
+    assert_eq!(row["progressEnd"], 8.0);
+    assert!(
+        row["playedSeconds"].as_i64().unwrap() >= 1,
+        "the running stretch is counted"
+    );
+    assert_eq!(row["partial"], false);
+
+    // The public view: the same racer's days without the organizers' internals.
+    let (s, days) = call(&h, "GET", "/api/racers/cuaco/days", None, None).await;
+    assert_eq!(s, StatusCode::OK);
+    let day = &days.as_array().unwrap()[0];
+    assert_eq!(
+        (day["items"].clone(), day["bosses"].clone()),
+        (json!(1), json!(1))
+    );
+    for private in [
+        "adjustSeconds",
+        "forcedCloses",
+        "donationCapped",
+        "racerName",
+        "racerId",
+        "diamonds",
+        "bits",
+    ] {
+        assert!(day.get(private).is_none(), "{private} must not be public");
+    }
+    let (s, _) = call(&h, "GET", "/api/racers/nadie/days", None, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    // A reset forgets the days of the run.
+    call(&h, "POST", "/api/admin/event/pause", Some(ADMIN), None).await;
+    call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "rehearsal": true })),
+    )
+    .await;
+    let start = (Utc::now() + chrono::Duration::days(30)).to_rfc3339();
+    let (s, _) = call(
+        &h,
+        "POST",
+        "/api/admin/event/reset",
+        Some(ADMIN),
+        Some(json!({ "confirm": "REINICIAR", "startAtUtc": start })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let (_, stats) = call(&h, "GET", "/api/admin/stats/days", Some(ADMIN), None).await;
+    assert!(
+        stats["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["racerId"] != "cuaco" || r["items"] == 0)
+    );
+}

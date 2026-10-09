@@ -86,6 +86,7 @@ pub fn router(hub: AppState) -> Router<AppState> {
         .route("/incidents/{id}/review", post(incident_review))
         .route("/audit", get(audit))
         .route("/donations", get(donations))
+        .route("/stats/days", get(stats_days))
         .route("/discord", get(discord_status).put(set_discord))
         .route("/discord/test", post(discord_test))
         .route("/donors/visibility", put(set_donors_visibility))
@@ -1364,4 +1365,19 @@ async fn discord_test(
         json!({ "channel": channel.as_str() }),
     );
     Ok(Json(json!({ "ok": true })))
+}
+
+// ---- statistics by day -----------------------------------------------------------------------------
+
+/// Every racer's figures for every game day: played time, sessions, progress, items, bosses,
+/// donations, organizer adjustments, time lost to running out... The panel pivots them by day.
+async fn stats_days(State(hub): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let rows = crate::api::days_with_live(&hub, None).await?;
+    let mut days: Vec<String> = rows
+        .iter()
+        .filter_map(|r| r["day"].as_str().map(str::to_string))
+        .collect();
+    days.sort();
+    days.dedup();
+    Ok(Json(json!({ "days": days, "rows": rows })))
 }

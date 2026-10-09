@@ -49,6 +49,20 @@ pub struct RacerRuntime {
     pub donation_ids: HashSet<String>,
     /// Reference point to spot a sudden jump in progress: (when, percentage).
     pub progress_mark: Option<(DateTime<Utc>, f64)>,
+    /// Statistics not yet handed to the persistence queue, one entry per game day (see `flush`).
+    pub day_pending: Vec<crate::db::DayDelta>,
+}
+
+impl RacerRuntime {
+    /// This racer's statistics for the game they are in right now.
+    pub fn day(&mut self) -> &mut crate::db::DayDelta {
+        let key = crate::clock::game_day(self.tz, self.reset_at);
+        if self.day_pending.last().is_none_or(|d| d.day != key) {
+            self.day_pending
+                .push(crate::db::DayDelta::new(&self.racer.id, &key));
+        }
+        self.day_pending.last_mut().expect("just pushed")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

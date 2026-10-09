@@ -368,6 +368,18 @@ export const en: Messages = {
       },
     ],
   },
+  racerDays: {
+    title: 'DAY BY DAY',
+    day: 'Day',
+    played: 'Played',
+    progress: 'Progress',
+    objectives: 'Objectives',
+    items: 'Items',
+    bosses: 'Bosses',
+    donations: 'Donations',
+    partial:
+      'This day began before the statistics existed: the time played and the progress may be incomplete.',
+  },
   racerPage: {
     back: 'BACK TO RACE',
     currentRank: 'CURRENT RANK',

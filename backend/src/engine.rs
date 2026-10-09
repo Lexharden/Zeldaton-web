@@ -344,6 +344,14 @@ impl RaceState {
         out
     }
 
+    /// The game day a racer is in and how much they have played in the stretch still running (not
+    /// stored until the next checkpoint), so "today" can be shown to the second.
+    pub fn day_live(&self, i: usize, now: DateTime<Utc>) -> (String, i64) {
+        let r = &self.racers[i];
+        let running = self.played_ms(i, now).0 - r.played_today_ms;
+        (crate::clock::game_day(r.tz, r.reset_at), running)
+    }
+
     /// (today, total) milliseconds really played, counting the running stretch since the last
     /// checkpoint (capped by what was left on the clock, like `freeze`).
     fn played_ms(&self, i: usize, now: DateTime<Utc>) -> (i64, i64) {
@@ -415,6 +423,13 @@ impl RaceState {
                     .push(PersistOp::RacerState(Box::new(self.racer_row(i))));
             }
         }
+        for r in &mut self.racers {
+            for day in r.day_pending.drain(..) {
+                if !day.is_empty() {
+                    fx.ops.push(PersistOp::DayStat(Box::new(day)));
+                }
+            }
+        }
         if fx.stats_dirty {
             fx.stats_dirty = false;
             self.stats.connected_racers =
@@ -434,6 +449,9 @@ impl RaceState {
             let used = elapsed.min(r.checkpoint.remaining_ms.max(0));
             r.played_ms_total += used;
             r.played_today_ms += used;
+            if used > 0 {
+                r.day().played_ms += used;
+            }
             r.checkpoint.remaining_ms = (r.checkpoint.remaining_ms - used).max(0);
         }
         r.checkpoint.at = now;
@@ -556,6 +574,9 @@ impl RaceState {
                 let resumed = status == RacerStatus::Paused;
                 self.racers[i].last_heartbeat = Some(now);
                 self.set_status(i, RacerStatus::Live, now, &mut fx);
+                if !resumed {
+                    self.racers[i].day().sessions += 1;
+                }
                 let id = racer_id.to_string();
                 fx.msgs.push(if resumed {
                     WsMessage::SessionResumed { racer_id: id }
@@ -629,6 +650,8 @@ impl RaceState {
                     });
                     self.racers[i].progress_mark = keep.or(Some((now, to)));
                 }
+                let before_pct = self.racers[i].racer.progress_percentage;
+                let mut objectives_gained = 0i64;
                 let r = &mut self.racers[i].racer;
                 if let Some(p) = patch.percentage {
                     r.progress_percentage = p;
@@ -646,7 +669,17 @@ impl RaceState {
                     if count(c) != count(&r.completed_objectives) {
                         r.milestone_at_utc = Some(iso(now));
                     }
+                    objectives_gained =
+                        (count(c) as i64 - count(&r.completed_objectives) as i64).max(0);
                     r.completed_objectives = c.clone();
+                }
+                {
+                    let day = self.racers[i].day();
+                    day.objectives += objectives_gained;
+                    if let Some(p) = patch.percentage {
+                        day.progress_start.get_or_insert(before_pct);
+                        day.progress_end = Some(p);
+                    }
                 }
                 fx.touch(i);
                 fx.msgs.push(WsMessage::GameProgress {
@@ -657,6 +690,7 @@ impl RaceState {
                     .current_area
                     .filter(|a| Some(a) != before_area.as_ref())
                 {
+                    self.racers[i].day().areas += 1;
                     self.note(
                         &mut fx,
                         now,
@@ -690,6 +724,7 @@ impl RaceState {
                     return Ok((fx, Reply::Ack));
                 }
                 self.racers[i].racer.items.insert(item.clone(), true);
+                self.racers[i].day().items += 1;
                 fx.touch(i);
                 fx.msgs.push(WsMessage::ItemAcquired {
                     racer_id: racer_id.to_string(),
@@ -753,6 +788,7 @@ impl RaceState {
                     .get_or_insert_with(RacerStats::default);
                 let count = stats.bosses_defeated.unwrap_or(0) + 1;
                 stats.bosses_defeated = Some(count);
+                self.racers[i].day().bosses += 1;
                 fx.touch(i);
                 fx.msgs.push(WsMessage::BossDefeated {
                     racer_id: racer_id.to_string(),
@@ -826,6 +862,10 @@ impl RaceState {
                     stream.viewers = next_viewers;
                     stream.is_live = next_live;
                     let update = stream.clone();
+                    if let Some(v) = next_viewers {
+                        let day = self.racers[i].day();
+                        day.peak_viewers = Some(day.peak_viewers.map_or(v, |p| p.max(v)));
+                    }
                     fx.touch(i);
                     fx.msgs.push(WsMessage::StreamUpdated {
                         racer_id: racer_id.to_string(),
@@ -955,6 +995,22 @@ impl RaceState {
                 r.donation_removed_ms -= applied;
             }
             r.donation_ids.insert(client_id.to_string());
+        }
+        {
+            let day = self.racers[i].day();
+            day.donations += 1;
+            if applied > 0 {
+                day.donation_added_ms += applied;
+            } else {
+                day.donation_removed_ms += -applied;
+            }
+            if limited_by.is_some() {
+                day.donation_capped += 1;
+            }
+            match source.currency {
+                DonationCurrency::Diamonds => day.diamonds += source.amount,
+                DonationCurrency::Bits => day.bits += source.amount,
+            }
         }
         fx.touch(i);
         fx.ops
@@ -1189,6 +1245,11 @@ impl RaceState {
             r.played_today_ms = 0;
             r.donation_added_ms = 0;
             r.donation_removed_ms = 0;
+            // The new day starts where the last one ended.
+            let pct = r.racer.progress_percentage;
+            let day = r.day();
+            day.progress_start = Some(pct);
+            day.progress_end = Some(pct);
         }
         if self.racers[i].racer.status == RacerStatus::Exhausted {
             let next_status = if self.racers[i].ingest.is_some() {
@@ -1223,6 +1284,7 @@ impl RaceState {
     fn exhaust(&mut self, i: usize, now: DateTime<Utc>, fx: &mut Fx) {
         self.freeze(i, now);
         self.racers[i].checkpoint.remaining_ms = 0;
+        self.racers[i].day().exhausted += 1;
         let id = self.racers[i].racer.id.clone();
         let name = self.racers[i].racer.display_name.clone();
         fx.msgs.push(WsMessage::SessionExhausted {
@@ -1382,6 +1444,7 @@ impl RaceState {
                 fx.down.push((id.into(), IngestDown::ForceClose));
                 if matches!(status, RacerStatus::Live | RacerStatus::Paused) {
                     self.freeze(i, now);
+                    self.racers[i].day().force_closed += 1;
                     let played_today = self.racers[i].played_today_ms / 1000;
                     let name = self.racers[i].racer.display_name.clone();
                     self.set_status(i, RacerStatus::Online, now, &mut fx);
@@ -1404,8 +1467,10 @@ impl RaceState {
                 self.freeze(i, now);
                 let max = self.budget_ms() * 2;
                 let r = &mut self.racers[i];
-                r.checkpoint.remaining_ms =
-                    (r.checkpoint.remaining_ms + delta_seconds * 1000).clamp(0, max);
+                let before = r.checkpoint.remaining_ms;
+                r.checkpoint.remaining_ms = (before + delta_seconds * 1000).clamp(0, max);
+                // What really changed (the clock has limits), not what was asked.
+                r.day().adjust_ms += r.checkpoint.remaining_ms - before;
                 fx.touch(i);
                 if status == RacerStatus::Exhausted && self.racers[i].checkpoint.remaining_ms > 0 {
                     self.set_status(i, RacerStatus::Online, now, &mut fx);
@@ -1645,6 +1710,7 @@ impl RaceState {
             r.donation_removed_ms = 0;
             r.donation_ids.clear();
             r.progress_mark = None;
+            r.day_pending.clear();
             r.racer.progress_percentage = 0.0;
             r.racer.current_area = None;
             r.racer.current_objective = None;
@@ -1727,6 +1793,7 @@ impl RaceState {
             donation_removed_ms: 0,
             donation_ids: HashSet::new(),
             progress_mark: None,
+            day_pending: Vec::new(),
         });
         let i = self.racers.len() - 1;
         let mut fx = Fx::default();

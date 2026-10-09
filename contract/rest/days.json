@@ -1,0 +1,19 @@
+[
+  {
+    "areas": 5,
+    "bosses": 1,
+    "day": "2026-10-07",
+    "donationAddedSeconds": 1800,
+    "donationRemovedSeconds": 300,
+    "donations": 4,
+    "exhausted": 0,
+    "items": 6,
+    "objectives": 3,
+    "partial": false,
+    "peakViewers": 310,
+    "playedSeconds": 12600,
+    "progressEnd": 24.0,
+    "progressStart": 18.0,
+    "sessions": 2
+  }
+]

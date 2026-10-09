@@ -15,6 +15,7 @@ import LiveRaceClock from '@/components/countdown/LiveRaceClock.vue'
 import GameProgress from '@/components/game/GameProgress.vue'
 import RacerItems from '@/components/game/RacerItems.vue'
 import PlatformIcon from '@/components/racers/PlatformIcon.vue'
+import RacerDays from '@/components/stats/RacerDays.vue'
 import RacerStats from '@/components/stats/RacerStats.vue'
 import StreamEmbed from '@/components/streams/StreamEmbed.vue'
 import { useRaceClock } from '@/composables/useRaceClock'
@@ -236,6 +237,8 @@ const facts = computed(() => {
             </section>
           </div>
         </div>
+
+        <RacerDays :racer-id="racer.id" />
 
         <section aria-labelledby="ls-title">
           <h2 id="ls-title" class="display mb-5 text-4xl text-white">

@@ -370,6 +370,18 @@ export const es = {
       },
     ],
   },
+  racerDays: {
+    title: 'DÍA A DÍA',
+    day: 'Día',
+    played: 'Jugado',
+    progress: 'Progreso',
+    objectives: 'Objetivos',
+    items: 'Objetos',
+    bosses: 'Jefes',
+    donations: 'Donaciones',
+    partial:
+      'Este día empezó antes de que existieran las estadísticas: el tiempo jugado y el progreso pueden estar incompletos.',
+  },
   racerPage: {
     back: 'VOLVER A LA CARRERA',
     currentRank: 'POSICIÓN ACTUAL',

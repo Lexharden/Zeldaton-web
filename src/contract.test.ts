@@ -152,6 +152,38 @@ describe('rest fixtures', () => {
     }
   })
 
+  it("days: what the public sees of a racer's game day", () => {
+    const days = read<Record<string, unknown>[]>('rest/days.json')
+    expect(days.length).toBeGreaterThan(0)
+    for (const d of days) {
+      expectKeys(d, [
+        'day',
+        'playedSeconds',
+        'sessions',
+        'objectives',
+        'items',
+        'bosses',
+        'areas',
+        'donations',
+        'donationAddedSeconds',
+        'donationRemovedSeconds',
+        'exhausted',
+        'progressStart',
+        'progressEnd',
+        'peakViewers',
+        'partial',
+      ])
+      for (const hidden of [
+        'adjustSeconds',
+        'forcedCloses',
+        'donationCapped',
+        'racerName',
+        'diamonds',
+      ])
+        expect(d, hidden).not.toHaveProperty(hidden)
+    }
+  })
+
   it('standings, stream, activity and stats', () => {
     for (const s of read<Record<string, unknown>[]>('rest/standings.json'))
       expectKeys(s, ['racerId', 'rank'])

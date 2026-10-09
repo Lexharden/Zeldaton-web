@@ -19,6 +19,7 @@ pub fn router() -> Router<AppState> {
         .route("/event", get(event))
         .route("/racers", get(racers))
         .route("/racers/{id}", get(racer))
+        .route("/racers/{id}/days", get(racer_days))
         .route("/standings", get(standings_route))
         .route("/streams", get(streams))
         .route("/activity", get(activity))
@@ -154,4 +155,101 @@ async fn donors(
         )],
         Json(body),
     ))
+}
+
+/// Stored days (one racer or all) plus the stretch a running game has played since the last
+/// checkpoint, so today's played time is exact to the second. Each row carries the racer's name.
+pub async fn days_with_live(hub: &AppState, racer: Option<&str>) -> Result<Vec<Value>, ApiError> {
+    let mut rows = crate::db::racer_days(&hub.pool, racer)
+        .await
+        .map_err(ApiError::internal)?;
+    let now = Utc::now();
+    let live: Vec<(String, String, String, i64)> = hub.read(|s| {
+        (0..s.racers.len())
+            .filter(|i| racer.is_none_or(|id| s.racers[*i].racer.id == id))
+            .map(|i| {
+                let (day, running) = s.day_live(i, now);
+                (
+                    s.racers[i].racer.id.clone(),
+                    s.racers[i].racer.display_name.clone(),
+                    day,
+                    running,
+                )
+            })
+            .collect()
+    });
+    for (id, _, day, running) in &live {
+        if *running < 1000 {
+            continue;
+        }
+        let secs = running / 1000;
+        match rows
+            .iter_mut()
+            .find(|r| r["racerId"] == id.as_str() && r["day"] == day.as_str())
+        {
+            Some(row) => {
+                row["playedSeconds"] = json!(row["playedSeconds"].as_i64().unwrap_or(0) + secs)
+            }
+            None => rows.push(json!({
+                "racerId": id, "day": day, "playedSeconds": secs, "sessions": 0, "objectives": 0,
+                "items": 0, "bosses": 0, "areas": 0, "donations": 0, "donationAddedSeconds": 0,
+                "donationRemovedSeconds": 0, "donationCapped": 0, "diamonds": 0, "bits": 0,
+                "adjustSeconds": 0, "exhausted": 0, "forcedCloses": 0, "progressStart": null,
+                "progressEnd": null, "peakViewers": null, "partial": true,
+            })),
+        }
+    }
+    let names: std::collections::HashMap<&str, &str> = live
+        .iter()
+        .map(|(id, name, _, _)| (id.as_str(), name.as_str()))
+        .collect();
+    for row in &mut rows {
+        let name = names
+            .get(row["racerId"].as_str().unwrap_or(""))
+            .copied()
+            .unwrap_or("");
+        row["racerName"] = json!(name);
+    }
+    rows.sort_by(|a, b| {
+        (a["day"].as_str(), a["racerName"].as_str())
+            .cmp(&(b["day"].as_str(), b["racerName"].as_str()))
+    });
+    Ok(rows)
+}
+
+/// What the public may see of a day: no organizer internals (adjustments, forced closes, caps).
+pub fn public_day(row: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    for key in [
+        "day",
+        "playedSeconds",
+        "sessions",
+        "objectives",
+        "items",
+        "bosses",
+        "areas",
+        "donations",
+        "donationAddedSeconds",
+        "donationRemovedSeconds",
+        "exhausted",
+        "progressStart",
+        "progressEnd",
+        "peakViewers",
+        "partial",
+    ] {
+        out.insert(key.into(), row[key].clone());
+    }
+    Value::Object(out)
+}
+
+/// A racer's day by day statistics.
+async fn racer_days(
+    State(hub): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<Value>>, ApiError> {
+    if !hub.read(|s| s.idx(&id).is_some()) {
+        return Err(ApiError::NotFound);
+    }
+    let rows = days_with_live(&hub, Some(&id)).await?;
+    Ok(Json(rows.iter().map(public_day).collect()))
 }

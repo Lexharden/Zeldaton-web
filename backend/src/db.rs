@@ -115,6 +115,53 @@ pub enum PersistOp {
     /// Event reset: forgets the race itself (activity feed and donation ledger). Racers, tokens,
     /// catalog, accounts and the audit log stay.
     ClearRaceData,
+    /// Adds to a racer's statistics for one game day (see `racer_days`).
+    DayStat(Box<DayDelta>),
+}
+
+/// What happened to a racer during one game day, to be added to its `racer_days` row.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DayDelta {
+    pub racer_id: String,
+    pub day: String,
+    pub played_ms: i64,
+    pub sessions: i64,
+    pub objectives: i64,
+    pub items: i64,
+    pub bosses: i64,
+    pub areas: i64,
+    pub donations: i64,
+    pub donation_added_ms: i64,
+    pub donation_removed_ms: i64,
+    pub donation_capped: i64,
+    pub diamonds: i64,
+    pub bits: i64,
+    pub adjust_ms: i64,
+    pub exhausted: i64,
+    pub force_closed: i64,
+    /// Progress when the day began; the first value reported for the day wins.
+    pub progress_start: Option<f64>,
+    /// Latest progress of the day.
+    pub progress_end: Option<f64>,
+    pub peak_viewers: Option<i64>,
+    /// The day began before the statistics existed (some figures are incomplete).
+    pub partial: bool,
+}
+
+impl DayDelta {
+    pub fn new(racer_id: &str, day: &str) -> Self {
+        Self {
+            racer_id: racer_id.into(),
+            day: day.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Nothing to store.
+    pub fn is_empty(&self) -> bool {
+        let blank = Self::new(&self.racer_id, &self.day);
+        *self == blank
+    }
 }
 
 pub(crate) fn rfc(d: DateTime<Utc>) -> String {
@@ -246,6 +293,57 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
                 .execute(pool)
                 .await?;
         }
+        PersistOp::DayStat(d) => {
+            sqlx::query(
+                "INSERT INTO racer_days (racer_id,day,played_ms,sessions,objectives,items,bosses,areas,donations,
+                    donation_added_ms,donation_removed_ms,donation_capped,diamonds,bits,adjust_ms,exhausted,force_closed,
+                    progress_start,progress_end,peak_viewers,partial)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ON CONFLICT(racer_id,day) DO UPDATE SET
+                    played_ms = played_ms + excluded.played_ms,
+                    sessions = sessions + excluded.sessions,
+                    objectives = objectives + excluded.objectives,
+                    items = items + excluded.items,
+                    bosses = bosses + excluded.bosses,
+                    areas = areas + excluded.areas,
+                    donations = donations + excluded.donations,
+                    donation_added_ms = donation_added_ms + excluded.donation_added_ms,
+                    donation_removed_ms = donation_removed_ms + excluded.donation_removed_ms,
+                    donation_capped = donation_capped + excluded.donation_capped,
+                    diamonds = diamonds + excluded.diamonds,
+                    bits = bits + excluded.bits,
+                    adjust_ms = adjust_ms + excluded.adjust_ms,
+                    exhausted = exhausted + excluded.exhausted,
+                    force_closed = force_closed + excluded.force_closed,
+                    progress_start = COALESCE(progress_start, excluded.progress_start),
+                    progress_end = COALESCE(excluded.progress_end, progress_end),
+                    peak_viewers = MAX(COALESCE(peak_viewers, 0), COALESCE(excluded.peak_viewers, 0)),
+                    partial = MAX(partial, excluded.partial)",
+            )
+            .bind(&d.racer_id)
+            .bind(&d.day)
+            .bind(d.played_ms)
+            .bind(d.sessions)
+            .bind(d.objectives)
+            .bind(d.items)
+            .bind(d.bosses)
+            .bind(d.areas)
+            .bind(d.donations)
+            .bind(d.donation_added_ms)
+            .bind(d.donation_removed_ms)
+            .bind(d.donation_capped)
+            .bind(d.diamonds)
+            .bind(d.bits)
+            .bind(d.adjust_ms)
+            .bind(d.exhausted)
+            .bind(d.force_closed)
+            .bind(d.progress_start)
+            .bind(d.progress_end)
+            .bind(d.peak_viewers)
+            .bind(d.partial)
+            .execute(pool)
+            .await?;
+        }
         PersistOp::ClearRaceData => {
             let mut tx = pool.begin().await?;
             sqlx::query("DELETE FROM activity")
@@ -256,6 +354,9 @@ pub async fn apply(pool: &SqlitePool, op: PersistOp) -> Result<(), sqlx::Error> 
                 .await?;
             // A reset race starts with a clean slate of "already announced" notices.
             sqlx::query("DELETE FROM notices_sent")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM racer_days")
                 .execute(&mut *tx)
                 .await?;
             sqlx::query("DELETE FROM incidents")
@@ -564,6 +665,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
             donation_removed_ms: r.get("donation_removed_ms"),
             donation_ids: donation_ids.remove(&id).unwrap_or_default(),
             progress_mark: None,
+            day_pending: Vec::new(),
         });
     }
 
@@ -822,4 +924,202 @@ pub async fn notice_reserve(
         .execute(pool)
         .await?;
     Ok(done.rows_affected() == 1)
+}
+
+/// Every stored day of one racer (or all racers), oldest first, as the API serves them.
+pub async fn racer_days(
+    pool: &SqlitePool,
+    racer: Option<&str>,
+) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT * FROM racer_days WHERE (?1 IS NULL OR racer_id = ?1) ORDER BY day, racer_id",
+    )
+    .bind(racer)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(day_json).collect())
+}
+
+fn day_json(r: sqlx::sqlite::SqliteRow) -> serde_json::Value {
+    let secs = |col: &str| r.get::<i64, _>(col) / 1000;
+    serde_json::json!({
+        "racerId": r.get::<String, _>("racer_id"),
+        "day": r.get::<String, _>("day"),
+        "playedSeconds": secs("played_ms"),
+        "sessions": r.get::<i64, _>("sessions"),
+        "objectives": r.get::<i64, _>("objectives"),
+        "items": r.get::<i64, _>("items"),
+        "bosses": r.get::<i64, _>("bosses"),
+        "areas": r.get::<i64, _>("areas"),
+        "donations": r.get::<i64, _>("donations"),
+        "donationAddedSeconds": secs("donation_added_ms"),
+        "donationRemovedSeconds": secs("donation_removed_ms"),
+        "donationCapped": r.get::<i64, _>("donation_capped"),
+        "diamonds": r.get::<i64, _>("diamonds"),
+        "bits": r.get::<i64, _>("bits"),
+        "adjustSeconds": secs("adjust_ms"),
+        "exhausted": r.get::<i64, _>("exhausted"),
+        "forcedCloses": r.get::<i64, _>("force_closed"),
+        "progressStart": r.get::<Option<f64>, _>("progress_start"),
+        "progressEnd": r.get::<Option<f64>, _>("progress_end"),
+        "peakViewers": r.get::<Option<i64>, _>("peak_viewers"),
+        "partial": r.get::<i64, _>("partial") != 0,
+    })
+}
+
+/// The local date a moment belongs to, for a day that starts at `reset` local time.
+fn label_of(tz: Tz, reset: chrono::NaiveTime, at: DateTime<Utc>) -> String {
+    let local = at.with_timezone(&tz);
+    let d = local.date_naive();
+    if local.time() < reset {
+        d.pred_opt().unwrap_or(d)
+    } else {
+        d
+    }
+    .to_string()
+}
+
+type Days = HashMap<(String, String), DayDelta>;
+
+/// The row of the day a logged moment falls in (a `partial` one is created on first use).
+fn day_at<'a>(
+    days: &'a mut Days,
+    zones: &HashMap<String, Tz>,
+    reset: chrono::NaiveTime,
+    racer: &str,
+    ts: &str,
+) -> Option<&'a mut DayDelta> {
+    let tz = *zones.get(racer)?;
+    let when = DateTime::parse_from_rfc3339(ts).ok()?.with_timezone(&Utc);
+    let day = label_of(tz, reset, when);
+    Some(
+        days.entry((racer.to_string(), day.clone()))
+            .or_insert_with(|| DayDelta {
+                partial: true,
+                ..DayDelta::new(racer, &day)
+            }),
+    )
+}
+
+/// One-time: when the day table is empty but the race already has history, rebuild the counts from
+/// the activity feed, the donation ledger and the audit log, and today's played time from the racer's
+/// saved state. Days built this way are marked `partial` (played time, sessions, progress and viewers
+/// of the past days were never recorded). Returns how many day rows were written.
+pub async fn backfill_days(pool: &SqlitePool) -> Result<usize, sqlx::Error> {
+    let have: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM racer_days")
+        .fetch_one(pool)
+        .await?;
+    if have > 0 {
+        return Ok(0);
+    }
+    let Some(reset) =
+        sqlx::query_scalar::<_, String>("SELECT daily_reset_local_time FROM event LIMIT 1")
+            .fetch_optional(pool)
+            .await?
+            .and_then(|t| crate::clock::parse_local_time(&t))
+    else {
+        return Ok(0);
+    };
+    let mut zones: HashMap<String, Tz> = HashMap::new();
+    for r in sqlx::query("SELECT id, timezone FROM racers")
+        .fetch_all(pool)
+        .await?
+    {
+        if let Ok(tz) = r.get::<String, _>("timezone").parse::<Tz>() {
+            zones.insert(r.get("id"), tz);
+        }
+    }
+    let mut days: Days = HashMap::new();
+    for a in sqlx::query("SELECT ts, racer_id, code FROM activity WHERE racer_id IS NOT NULL")
+        .fetch_all(pool)
+        .await?
+    {
+        let (racer, ts, code): (String, String, String) =
+            (a.get("racer_id"), a.get("ts"), a.get("code"));
+        let Some(d) = day_at(&mut days, &zones, reset, &racer, &ts) else {
+            continue;
+        };
+        match code.as_str() {
+            "ITEM_ACQUIRED" => d.items += 1,
+            "BOSS_DEFEATED" => d.bosses += 1,
+            "AREA_CHANGED" => d.areas += 1,
+            "SESSION_EXHAUSTED" => d.exhausted += 1,
+            _ => {}
+        }
+    }
+    for t in sqlx::query(
+        "SELECT ts, racer_id, currency, amount, applied_ms, limited_by FROM time_donations",
+    )
+    .fetch_all(pool)
+    .await?
+    {
+        let (racer, ts): (String, String) = (t.get("racer_id"), t.get("ts"));
+        let Some(d) = day_at(&mut days, &zones, reset, &racer, &ts) else {
+            continue;
+        };
+        d.donations += 1;
+        let applied: i64 = t.get("applied_ms");
+        if applied > 0 {
+            d.donation_added_ms += applied;
+        } else {
+            d.donation_removed_ms += -applied;
+        }
+        if t.get::<Option<String>, _>("limited_by").is_some() {
+            d.donation_capped += 1;
+        }
+        let amount: i64 = t.get("amount");
+        if t.get::<String, _>("currency") == "bits" {
+            d.bits += amount;
+        } else {
+            d.diamonds += amount;
+        }
+    }
+    for a in sqlx::query(
+        "SELECT ts, racer_id, action, payload FROM audit_log
+         WHERE racer_id IS NOT NULL AND action IN ('racer.adjust-time', 'racer.force-close')",
+    )
+    .fetch_all(pool)
+    .await?
+    {
+        let (racer, ts, action): (String, String, String) =
+            (a.get("racer_id"), a.get("ts"), a.get("action"));
+        let payload: serde_json::Value =
+            serde_json::from_str(&a.get::<String, _>("payload")).unwrap_or_default();
+        let Some(d) = day_at(&mut days, &zones, reset, &racer, &ts) else {
+            continue;
+        };
+        if action == "racer.force-close" {
+            d.force_closed += 1;
+        } else if let Some(secs) = payload["deltaSeconds"].as_i64() {
+            d.adjust_ms += secs * 1000;
+        }
+    }
+    // Today's played time is the one measure already kept per racer.
+    for s in sqlx::query("SELECT racer_id, reset_at, played_today_ms FROM racer_state")
+        .fetch_all(pool)
+        .await?
+    {
+        let racer: String = s.get("racer_id");
+        let played: i64 = s.get("played_today_ms");
+        let (Some(tz), Ok(reset_at)) = (
+            zones.get(&racer).copied(),
+            DateTime::parse_from_rfc3339(&s.get::<String, _>("reset_at")),
+        ) else {
+            continue;
+        };
+        if played > 0 {
+            let day = crate::clock::game_day(tz, reset_at.with_timezone(&Utc));
+            days.entry((racer.clone(), day.clone()))
+                .or_insert_with(|| DayDelta {
+                    partial: true,
+                    ..DayDelta::new(&racer, &day)
+                })
+                .played_ms += played;
+        }
+    }
+    let written = days.len();
+    for (_, delta) in days {
+        apply(pool, PersistOp::DayStat(Box::new(delta))).await?;
+    }
+    Ok(written)
 }

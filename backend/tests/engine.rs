@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, TimeZone, Utc};
+use zeldathon_server::db::{DayDelta, PersistOp};
 use zeldathon_server::domain::*;
 use zeldathon_server::engine::*;
 use zeldathon_server::notify::{Detail, Notice};
@@ -1478,4 +1479,216 @@ fn the_milestone_is_saved_and_a_reset_clears_it() {
         .unwrap();
     let i = s.idx("ralbat").unwrap();
     assert!(s.view(i, t0()).milestone_at_utc.is_none());
+}
+
+// ---- statistics by day ---------------------------------------------------------------------------
+
+/// The day figures an `Fx` hands to the queue, merged per day.
+fn days(fx: &[&Fx]) -> std::collections::BTreeMap<String, DayDelta> {
+    // The race has nine racers and a tick touches all of them: these tests follow ralbat.
+    let mut out: std::collections::BTreeMap<String, DayDelta> = Default::default();
+    for fx in fx {
+        for op in &fx.ops {
+            if let PersistOp::DayStat(d) = op
+                && d.racer_id == "ralbat"
+            {
+                let e = out
+                    .entry(d.day.clone())
+                    .or_insert_with(|| DayDelta::new(&d.racer_id, &d.day));
+                e.played_ms += d.played_ms;
+                e.sessions += d.sessions;
+                e.objectives += d.objectives;
+                e.items += d.items;
+                e.bosses += d.bosses;
+                e.areas += d.areas;
+                e.donations += d.donations;
+                e.donation_added_ms += d.donation_added_ms;
+                e.donation_removed_ms += d.donation_removed_ms;
+                e.donation_capped += d.donation_capped;
+                e.diamonds += d.diamonds;
+                e.bits += d.bits;
+                e.adjust_ms += d.adjust_ms;
+                e.exhausted += d.exhausted;
+                e.force_closed += d.force_closed;
+                e.progress_start = e.progress_start.or(d.progress_start);
+                e.progress_end = d.progress_end.or(e.progress_end);
+                e.peak_viewers = e.peak_viewers.max(d.peak_viewers);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn everything_a_racer_does_lands_on_the_day_it_happened() {
+    let mut s = state(t0());
+    let at = |secs: i64| t0() + Duration::seconds(secs);
+    let (a, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::Hello {
+            client_version: None,
+        },
+        t0(),
+    )
+    .unwrap();
+    let (b, _) = ingest(&mut s, "ralbat", IngestMsg::SessionStarted, t0()).unwrap();
+    let (c, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::ItemAcquired {
+            item: "longshot".into(),
+        },
+        at(10),
+    )
+    .unwrap();
+    let (d, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::BossDefeated {
+            boss: "gohma".into(),
+        },
+        at(20),
+    )
+    .unwrap();
+    let progress = IngestMsg::GameProgress {
+        progress: GameProgressPatch {
+            percentage: Some(12.0),
+            current_area: Some("forest-temple".into()),
+            completed_objectives: Some(vec!["kokiri-forest".into(), "deku-tree".into()]),
+            ..Default::default()
+        },
+    };
+    let (e, _) = ingest(&mut s, "ralbat", progress, at(30)).unwrap();
+    let (f, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(80),
+        },
+        at(35),
+    )
+    .unwrap();
+    let (g, _) = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::StreamState {
+            live: true,
+            viewers: Some(50),
+        },
+        at(36),
+    )
+    .unwrap();
+    // 3 diamonds at the default 3 s each remove 9 s; a bits donation adds 60 s.
+    let (h, _) = donate(&mut s, "ralbat", "d1", -1, diamonds("Rose", 1, 3), at(40)).unwrap();
+    let (i, _) = donate(&mut s, "ralbat", "d2", 60, bits(100), at(41)).unwrap();
+    let j = s
+        .admin_action(
+            "ralbat",
+            AdminAction::AdjustTime {
+                delta_seconds: -120,
+            },
+            at(50),
+        )
+        .unwrap();
+    let k = s
+        .admin_action("ralbat", AdminAction::ForceClose, at(60))
+        .unwrap();
+
+    let all = days(&[&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k]);
+    assert_eq!(all.len(), 1, "one game day so far");
+    let day = all.values().next().unwrap();
+    assert_eq!(day.racer_id, "ralbat");
+    assert_eq!(
+        day.played_ms, 60_000,
+        "played from the session start to the close"
+    );
+    assert_eq!(
+        (
+            day.sessions,
+            day.items,
+            day.bosses,
+            day.areas,
+            day.objectives
+        ),
+        (1, 1, 1, 1, 2)
+    );
+    assert_eq!((day.donations, day.diamonds, day.bits), (2, 3, 100));
+    assert_eq!(
+        (day.donation_removed_ms, day.donation_added_ms),
+        (9_000, 60_000)
+    );
+    assert_eq!(day.adjust_ms, -120_000);
+    assert_eq!((day.force_closed, day.exhausted), (1, 0));
+    assert_eq!(
+        (day.progress_start, day.progress_end),
+        (Some(0.0), Some(12.0))
+    );
+    assert_eq!(day.peak_viewers, Some(80), "the peak, not the last value");
+    // The day is named by the local date it began on (Mexico City, reset 06:00).
+    assert_eq!(all.keys().next().unwrap(), "2026-10-07");
+}
+
+#[test]
+fn a_daily_reset_closes_the_day_and_the_next_one_starts_where_it_ended() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let patch = IngestMsg::GameProgress {
+        progress: GameProgressPatch {
+            percentage: Some(40.0),
+            ..Default::default()
+        },
+    };
+    let (p, _) = ingest(&mut s, "ralbat", patch, t0() + Duration::seconds(100)).unwrap();
+    // Past 06:00 Mexico City the next morning (12:00 UTC): the tick resets the day.
+    let next_morning = Utc.with_ymd_and_hms(2026, 10, 8, 12, 5, 0).unwrap();
+    let reset = s.tick(next_morning, 1_000_000);
+    let later = ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::BossDefeated {
+            boss: "morpha".into(),
+        },
+        next_morning + Duration::seconds(5),
+    )
+    .map(|(fx, _)| fx);
+    // After the reset the racer's game is no longer running (no heartbeat): the boss is refused or
+    // lands on the new day; either way nothing leaks into the old one.
+    let all = days(&[&p, &reset]);
+    let first = &all["2026-10-07"];
+    assert!(first.played_ms > 0);
+    assert_eq!(first.progress_end, Some(40.0));
+    let second = &all["2026-10-08"];
+    assert_eq!(
+        (second.progress_start, second.progress_end),
+        (Some(40.0), Some(40.0))
+    );
+    assert_eq!(second.played_ms, 0);
+    let _ = later;
+}
+
+#[test]
+fn running_out_of_time_and_the_event_reset_are_counted_and_cleared() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    let fx = s.tick(t0() + Duration::hours(5), 1_000_000);
+    let day = &days(&[&fx])["2026-10-07"];
+    assert_eq!(day.exhausted, 1);
+    assert_eq!(
+        day.played_ms,
+        4 * 3_600_000,
+        "played exactly the daily budget"
+    );
+    // A rehearsal reset leaves nothing pending for the old run.
+    s.event.rehearsal = true;
+    let fx = s
+        .reset_event(Some("2026-12-01T12:00:00Z".into()), true, t0())
+        .unwrap();
+    assert!(days(&[&fx]).is_empty(), "the reset forgets the day figures");
+    assert!(
+        fx.ops
+            .iter()
+            .any(|op| matches!(op, PersistOp::ClearRaceData))
+    );
 }

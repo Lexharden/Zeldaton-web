@@ -70,6 +70,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("===============================================\n");
     }
 
+    // Days played before the day-by-day statistics existed are rebuilt once from the logs.
+    match db::backfill_days(&pool).await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(
+            rows = n,
+            "day statistics rebuilt from the activity, donation and audit logs"
+        ),
+        Err(e) => tracing::warn!(error = %e, "could not rebuild the day statistics"),
+    }
+
     // Databases created before the catalog existed get the factory one (never overwrites edits).
     if db::ensure_catalog(&pool).await? {
         tracing::info!("catalog seeded with the factory items and objectives");

@@ -356,6 +356,18 @@ fn rest_payloads_match_their_fixtures() {
             json!({ "donations": 9, "addedSeconds": 2100, "removedSeconds": 120 }),
         ),
     );
+    // A racer's game day as the public sees it (organizer internals are stripped).
+    let day = json!({
+        "racerId": "ralbat", "racerName": "Ralbat", "day": "2026-10-07", "playedSeconds": 12600,
+        "sessions": 2, "objectives": 3, "items": 6, "bosses": 1, "areas": 5, "donations": 4,
+        "donationAddedSeconds": 1800, "donationRemovedSeconds": 300, "donationCapped": 1,
+        "diamonds": 120, "bits": 0, "adjustSeconds": -60, "exhausted": 0, "forcedCloses": 0,
+        "progressStart": 18.0, "progressEnd": 24.0, "peakViewers": 310, "partial": false,
+    });
+    check(
+        "rest/days.json",
+        json!([zeldathon_server::api::public_day(&day)]),
+    );
     check(
         "rest/hiveshock-stats.json",
         serde_json::to_value(&state.stats).unwrap_or_default(),

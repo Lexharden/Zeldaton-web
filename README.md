@@ -118,6 +118,17 @@ until they accept (Consent Mode v2, script injected only after consent), rejecti
 Global Privacy Control counts as a rejection, and `/admin` is never tracked. Page views are sent on every SPA
 navigation. The policy lives at `/privacy` (and terms at `/terms`); "Cookie settings" in the footer reopens the notice.
 
+### Statistics by day
+
+Every racer gets one row per **game day** (the stretch between two of their daily resets, named by the local date it began
+on): time really played, sessions, progress at the start and end, objectives, items, bosses, zones, donations (count, time
+added and removed, how many a limit cut short, diamonds and bits), hand adjustments, times they ran out of time, forced
+closes and peak viewers. They are added to as things happen (`racer_days`) and the figures of a running game are exact to the
+second. `/admin → Estadísticas` shows one day for everybody or one racer across the days, with totals and a CSV export; the
+public racer page has a "Día a día" table (without organizer internals). Days that began before this existed are rebuilt once
+from the activity, donation and audit logs and marked `~`: their played time, sessions and progress were not measured.
+API: `GET /api/admin/stats/days`, `GET /api/racers/:id/days`.
+
 ### How the standings are decided
 
 Finished racers first, in the order they crossed the line (the first one is the winner), then by less time really played.

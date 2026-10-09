@@ -7,6 +7,7 @@ import { createMockRacers } from '@/data/mock/racers'
 import { createMockStandings } from '@/data/mock/standings'
 import { createMockStreams } from '@/data/mock/streams'
 import type { DonorsBoard } from '@/types/donors'
+import type { PublicDay } from '@/types/stats'
 import type { EventInfo, EventStatus } from '@/types/event'
 import type { HiveShockStats } from '@/types/hiveshock'
 import type { Racer } from '@/types/racer'
@@ -141,6 +142,46 @@ export class MockRaceService implements RaceApi {
   async getHiveShockStats() {
     await delay(400)
     return { ...this.stats }
+  }
+  async getRacerDays(): Promise<PublicDay[]> {
+    await delay(300)
+    return [
+      ['2026-10-07', 12_600, 2, 3, 6, 1, 5, 4, 1_800, 300, 0, 18, 24, 310],
+      ['2026-10-08', 14_100, 3, 4, 9, 2, 7, 6, 2_700, 0, 1, 24, 41, 520],
+    ].map(
+      ([
+        day,
+        played,
+        sessions,
+        objectives,
+        items,
+        bosses,
+        areas,
+        donations,
+        added,
+        removed,
+        exhausted,
+        from,
+        to,
+        viewers,
+      ]) => ({
+        day: day as string,
+        playedSeconds: played as number,
+        sessions: sessions as number,
+        objectives: objectives as number,
+        items: items as number,
+        bosses: bosses as number,
+        areas: areas as number,
+        donations: donations as number,
+        donationAddedSeconds: added as number,
+        donationRemovedSeconds: removed as number,
+        exhausted: exhausted as number,
+        progressStart: from as number,
+        progressEnd: to as number,
+        peakViewers: viewers as number,
+        partial: false,
+      }),
+    )
   }
   async getDonors(): Promise<DonorsBoard> {
     await delay(300)

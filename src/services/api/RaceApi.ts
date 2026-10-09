@@ -1,5 +1,6 @@
 import type { Catalog } from '@/types/catalog'
 import type { DonorsBoard } from '@/types/donors'
+import type { PublicDay } from '@/types/stats'
 import type { EventInfo } from '@/types/event'
 import type { HiveShockStats } from '@/types/hiveshock'
 import type { Racer } from '@/types/racer'
@@ -17,6 +18,7 @@ export interface RaceApi {
   getClocks(): Promise<ClockState[]>
   getCatalog(): Promise<Catalog>
   getDonors(): Promise<DonorsBoard>
+  getRacerDays(id: string): Promise<PublicDay[]>
 }
 
 export type ApiErrorKind = 'timeout' | 'http' | 'network' | 'malformed' | 'not-found'

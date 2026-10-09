@@ -292,3 +292,38 @@ export interface RefereeNote {
   author: string
   text: string
 }
+
+/** One racer's figures for one game day, as the panel gets them. */
+export interface DayStat {
+  racerId: string
+  racerName: string
+  /** The local date the game day began on, e.g. "2026-10-07". */
+  day: string
+  playedSeconds: number
+  sessions: number
+  objectives: number
+  items: number
+  bosses: number
+  areas: number
+  donations: number
+  donationAddedSeconds: number
+  donationRemovedSeconds: number
+  /** Donations a limit cut short. */
+  donationCapped: number
+  diamonds: number
+  bits: number
+  /** Net time organizers added (+) or removed (−) by hand. */
+  adjustSeconds: number
+  /** Times they ran out of time / an organizer closed their game. */
+  exhausted: number
+  forcedCloses: number
+  progressStart: number | null
+  progressEnd: number | null
+  peakViewers: number | null
+  partial: boolean
+}
+
+export interface DayStatsResponse {
+  days: string[]
+  rows: DayStat[]
+}

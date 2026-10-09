@@ -81,6 +81,11 @@ export const router = createRouter({
           component: () => import('@/admin/pages/Donations.vue'),
         },
         {
+          path: 'stats',
+          name: 'admin-stats',
+          component: () => import('@/admin/pages/Stats.vue'),
+        },
+        {
           path: 'accounts',
           name: 'admin-accounts',
           component: () => import('@/admin/pages/Accounts.vue'),

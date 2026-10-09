@@ -5,6 +5,7 @@ import { DEVELOPER } from '@/config/event'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
   Activity,
+  BarChart3,
   BookOpen,
   CalendarClock,
   ExternalLink,
@@ -59,6 +60,7 @@ const nav = computed(() =>
     { name: 'admin-racers', label: 'Corredores', icon: Activity, role: 'moderator' },
     { name: 'admin-catalog', label: 'Catálogo', icon: BookOpen, role: 'admin' },
     { name: 'admin-donations', label: 'Donaciones', icon: Gift, role: 'moderator' },
+    { name: 'admin-stats', label: 'Estadísticas', icon: BarChart3, role: 'moderator' },
     { name: 'admin-audit', label: 'Auditoría', icon: ScrollText, role: 'moderator' },
     { name: 'admin-accounts', label: 'Cuentas', icon: Users, role: 'admin' },
   ].filter((n) => n.role === 'moderator' || admin.isAdmin),

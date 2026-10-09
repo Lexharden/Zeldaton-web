@@ -40,6 +40,13 @@ fn resolve_local(tz: Tz, date: NaiveDate, time: NaiveTime) -> DateTime<Utc> {
 }
 
 /// Next occurrence (strictly after `now`) of the daily reset wall-clock time in `tz`.
+/// The game day a racer is in, named by the local date it started on: the day ends at `reset_at`
+/// (their next daily reset), so it began the local date before that reset.
+pub fn game_day(tz: Tz, reset_at: DateTime<Utc>) -> String {
+    let d = reset_at.with_timezone(&tz).date_naive();
+    d.pred_opt().unwrap_or(d).to_string()
+}
+
 pub fn next_reset_utc(now: DateTime<Utc>, tz: Tz, reset_local: NaiveTime) -> DateTime<Utc> {
     let today = now.with_timezone(&tz).date_naive();
     let candidate = resolve_local(tz, today, reset_local);

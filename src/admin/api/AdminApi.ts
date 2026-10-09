@@ -5,6 +5,7 @@ import type { Racer } from '@/types/racer'
 import type {
   AdminCatalog,
   AuditRow,
+  DayStatsResponse,
   DiscordChannelName,
   DiscordPatch,
   DiscordStatus,
@@ -161,6 +162,9 @@ export class AdminApi {
   /** Wipes the test run and puts the event back to "upcoming". `confirm` must be REINICIAR. */
   resetEvent = (body: { confirm: string; startAtUtc?: string; leaveRehearsal: boolean }) =>
     this.request<EventInfo>('POST', '/event/reset', body)
+
+  // ---- statistics by day
+  statsDays = () => this.request<DayStatsResponse>('GET', '/stats/days')
 
   // ---- Discord notifications
   discord = () => this.request<DiscordStatus>('GET', '/discord')
