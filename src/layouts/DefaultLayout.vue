@@ -9,6 +9,7 @@ import SiteFooter from '@/components/layout/SiteFooter.vue'
 import NaviCursor from '@/components/common/NaviCursor.vue'
 import CookieBanner from '@/components/common/CookieBanner.vue'
 import EasterEggs from '@/components/common/EasterEggs.vue'
+import PollModal from '@/components/poll/PollModal.vue'
 import FinishOverlay from '@/components/race/FinishOverlay.vue'
 
 const route = useRoute()
@@ -37,5 +38,6 @@ const showHeader = computed(() => route.meta.eventHeader !== false)
     <NaviCursor />
     <CookieBanner />
     <EasterEggs />
+    <PollModal />
   </div>
 </template>

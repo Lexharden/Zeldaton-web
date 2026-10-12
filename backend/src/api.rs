@@ -2,7 +2,7 @@
 
 use axum::extract::{Path, Query, State};
 use axum::http::header::{CACHE_CONTROL, HeaderValue};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -26,6 +26,8 @@ pub fn router() -> Router<AppState> {
         .route("/hiveshock/stats", get(hiveshock_stats))
         .route("/clocks", get(clocks))
         .route("/catalog", get(catalog))
+        .route("/poll", get(crate::poll::get_poll))
+        .route("/poll/vote", post(crate::poll::vote))
         // Live race data must never be served from a stale cache.
         .layer(SetResponseHeaderLayer::overriding(
             CACHE_CONTROL,

@@ -91,6 +91,9 @@ pub fn router(hub: AppState) -> Router<AppState> {
         .route("/discord/test", post(discord_test))
         .route("/donors/visibility", put(set_donors_visibility))
         .route("/donors/hidden", put(set_donor_hidden))
+        .route("/poll", get(poll_view))
+        .route("/poll/mode", put(poll_set_mode))
+        .route("/poll/votes", delete(poll_clear))
         .layer(middleware::from_fn_with_state(hub, authenticate));
     Router::new()
         .route("/auth/login", post(login))
@@ -121,11 +124,7 @@ fn cookie_secure(hub: &AppState, headers: &HeaderMap) -> bool {
 }
 
 fn client_ip(headers: &HeaderMap) -> String {
-    header(headers, "x-forwarded-for")
-        .and_then(|v| v.split(',').next())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| "unknown".into())
+    crate::auth::client_ip(headers).unwrap_or_else(|| "unknown".into())
 }
 
 fn account_error(e: AccountError) -> ApiError {
@@ -1211,6 +1210,49 @@ pub async fn donors_public(pool: &sqlx::SqlitePool) -> bool {
         db::setting(pool, "donors_public").await,
         Ok(Some(v)) if v == "false"
     )
+}
+
+/// The public poll with the full results, whatever its mode.
+async fn poll_view(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Moderator)?;
+    crate::poll::admin_view(&hub).await.map(Json)
+}
+
+#[derive(Deserialize)]
+struct PollModeBody {
+    mode: String,
+}
+
+async fn poll_set_mode(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+    Json(body): Json<PollModeBody>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    let mode = crate::poll::Mode::parse(&body.mode)
+        .ok_or_else(|| ApiError::BadRequest("mode must be auto, open or closed".into()))?;
+    crate::poll::set_mode(&hub, mode).await?;
+    hub.audit_as(
+        &p.actor,
+        "poll.mode",
+        None,
+        json!({ "mode": mode.as_str() }),
+    );
+    crate::poll::admin_view(&hub).await.map(Json)
+}
+
+/// Wipes every vote (useful after testing the page before the real thing).
+async fn poll_clear(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    let removed = crate::poll::clear_votes(&hub).await?;
+    hub.audit_as(&p.actor, "poll.clear", None, json!({ "removed": removed }));
+    crate::poll::admin_view(&hub).await.map(Json)
 }
 
 #[derive(Deserialize)]

@@ -128,6 +128,32 @@ describe('rest fixtures', () => {
     for (const c of r.channels) expectKeys(c, ['platform', 'handle', 'url'])
   })
 
+  it('poll: results only travel once the connection has voted', () => {
+    const voted = read<{
+      open: boolean
+      voted: string | null
+      totalVotes: number
+      options: Record<string, unknown>[]
+      results: Record<string, unknown>[]
+    }>('rest/poll.json')
+    expectKeys(voted as unknown as Record<string, unknown>, [
+      'open',
+      'mode',
+      'options',
+      'voted',
+      'totalVotes',
+      'results',
+    ])
+    for (const o of voted.options) expectKeys(o, ['racerId', 'name'])
+    for (const r of voted.results) expectKeys(r, ['racerId', 'votes', 'percent'])
+    expect(voted.voted).toBe('cuaco')
+
+    const fresh = read<Record<string, unknown>>('rest/poll-unvoted.json')
+    expect(fresh.voted).toBeNull()
+    expect(fresh.results).toBeUndefined()
+    expect(fresh.totalVotes).toBeUndefined()
+  })
+
   it('donors: only what the public board may show', () => {
     const d = read<{
       enabled: boolean

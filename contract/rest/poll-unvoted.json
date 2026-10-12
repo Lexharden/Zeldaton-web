@@ -1,0 +1,16 @@
+{
+  "mode": "auto",
+  "open": true,
+  "options": [
+    {
+      "avatarUrl": "/api/media/racers/cuaco.webp",
+      "name": "Cuaco",
+      "racerId": "cuaco"
+    },
+    {
+      "name": "Ralbat",
+      "racerId": "ralbat"
+    }
+  ],
+  "voted": null
+}

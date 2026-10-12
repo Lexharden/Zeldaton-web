@@ -13,6 +13,8 @@ export const en: Messages = {
       raceDesc: 'Live standings, progress and clocks for the Zeldatón Ocarina of Time race.',
       streams: 'Streams',
       streamsDesc: 'Watch every Zeldatón racer live on Twitch and YouTube.',
+      poll: 'Who will win?',
+      pollDesc: 'Vote for who you think will win Zeldatón. One vote per connection.',
       rules: 'Rules',
       rulesDesc: 'The rules of the Zeldatón Ocarina of Time community race.',
       hiveshock: 'HiveShock',
@@ -27,6 +29,7 @@ export const en: Messages = {
     racers: 'RACERS',
     streams: 'STREAMS',
     rules: 'RULES',
+    poll: 'POLL',
     hiveshock: 'HIVESHOCK',
     liveRace: 'LIVE RACE',
     live: 'LIVE',
@@ -165,6 +168,25 @@ export const en: Messages = {
     noStream: 'No stream linked for this racer.',
     liveStream: 'LIVE STREAM',
     stream: '{name} stream',
+  },
+  poll: {
+    eyebrow: 'POLL',
+    title: 'WHO WILL WIN?',
+    subtitle:
+      'Pick the racer you think will cross the finish line first. You will see the results as soon as you vote.',
+    modalText: 'Before the race starts: who are you betting on? It only takes a moment.',
+    choose: 'Racers',
+    vote: 'VOTE',
+    sending: 'SENDING…',
+    notNow: 'Not now',
+    oneVote:
+      'One vote per internet connection. We only keep an encrypted fingerprint of your connection, never your IP.',
+    yours: 'YOUR VOTE',
+    votes: '{n} votes',
+    total: '{n} votes in total',
+    thanks: 'Thanks for voting! Here is how the poll stands:',
+    closed: 'The poll is closed. These are the final results.',
+    empty: 'There are no results yet.',
   },
   donors: {
     eyebrow: 'THE COMMUNITY',
@@ -529,6 +551,10 @@ export const en: Messages = {
         {
           h: 'Donors',
           p: 'People who donate on racers\' streams (TikTok gifts, Twitch bits) appear in the public "Top donors" ranking with the name those platforms report, the time they moved and how much they gave. If you do not want to appear, ask us through the event\'s official channels and we will hide you from the ranking.',
+        },
+        {
+          h: '"Who will win?" poll',
+          p: 'To allow one vote per connection, when you vote we compute an encrypted fingerprint (a hash with a secret key) of your IP address and store it next to your choice. We do not store your IP and cannot recover it from the fingerprint. Fingerprints are deleted when the organizer resets the poll.',
         },
         {
           h: 'What data we use',

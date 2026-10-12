@@ -1,0 +1,29 @@
+{
+  "mode": "auto",
+  "open": true,
+  "options": [
+    {
+      "avatarUrl": "/api/media/racers/cuaco.webp",
+      "name": "Cuaco",
+      "racerId": "cuaco"
+    },
+    {
+      "name": "Ralbat",
+      "racerId": "ralbat"
+    }
+  ],
+  "results": [
+    {
+      "percent": 66.7,
+      "racerId": "cuaco",
+      "votes": 2
+    },
+    {
+      "percent": 33.3,
+      "racerId": "ralbat",
+      "votes": 1
+    }
+  ],
+  "totalVotes": 3,
+  "voted": "cuaco"
+}

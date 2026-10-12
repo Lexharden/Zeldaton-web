@@ -16,6 +16,7 @@ export const router = createRouter({
     { path: '/race', name: 'race', component: () => import('@/pages/Race.vue') },
     { path: '/racer/:id', name: 'racer', component: () => import('@/pages/Racer.vue') },
     { path: '/streams', name: 'streams', component: () => import('@/pages/Streams.vue') },
+    { path: '/encuesta', name: 'poll', component: () => import('@/pages/Poll.vue') },
     { path: '/rules', name: 'rules', component: () => import('@/pages/Rules.vue') },
     {
       path: '/privacy',
@@ -84,6 +85,11 @@ export const router = createRouter({
           path: 'stats',
           name: 'admin-stats',
           component: () => import('@/admin/pages/Stats.vue'),
+        },
+        {
+          path: 'poll',
+          name: 'admin-poll',
+          component: () => import('@/admin/pages/Poll.vue'),
         },
         {
           path: 'accounts',

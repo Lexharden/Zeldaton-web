@@ -2633,3 +2633,218 @@ async fn the_day_by_day_statistics_are_served_to_the_panel_and_to_the_public_wit
             .all(|r| r["racerId"] != "cuaco" || r["items"] == 0)
     );
 }
+
+// ---- "who will win?" poll -----------------------------------------------------------------------
+
+/// Moves the event's start into the future, so the poll's automatic mode finds it still upcoming.
+async fn event_not_started(h: &Harness) {
+    let start = (Utc::now() + chrono::Duration::days(30)).to_rfc3339();
+    let end = (Utc::now() + chrono::Duration::days(60)).to_rfc3339();
+    let (s, b) = call(
+        h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "startAtUtc": start, "endAtUtc": end })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{b}");
+}
+
+fn from_ip(ip: &str) -> Vec<(&'static str, String)> {
+    vec![("x-real-ip", ip.to_string())]
+}
+
+async fn vote(h: &Harness, ip: &str, racer: &str) -> (StatusCode, Value) {
+    let (s, _, b) = call_h(
+        h,
+        "POST",
+        "/api/poll/vote",
+        &from_ip(ip),
+        Some(json!({ "racerId": racer })),
+    )
+    .await;
+    (s, b)
+}
+
+#[tokio::test]
+async fn the_poll_takes_one_vote_per_connection_and_hides_results_until_you_vote() {
+    let h = harness().await;
+    event_not_started(&h).await;
+    let (s, _, before) = call_h(&h, "GET", "/api/poll", &from_ip("203.0.113.1"), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(before["open"], true);
+    assert_eq!(before["voted"], Value::Null);
+    assert!(before["options"].as_array().unwrap().len() >= 2);
+    assert!(before.get("results").is_none(), "no peeking before voting");
+
+    let (s, after) = vote(&h, "203.0.113.1", "cuaco").await;
+    assert_eq!(s, StatusCode::OK, "{after}");
+    assert_eq!(after["voted"], "cuaco");
+    assert_eq!(after["totalVotes"], 1);
+    assert_eq!(after["results"][0]["racerId"], "cuaco");
+    assert_eq!(after["results"][0]["percent"], 100.0);
+
+    // Same connection again: refused, also when it lies in X-Forwarded-For or changes racer.
+    let (s, _) = vote(&h, "203.0.113.1", "ralbat").await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/poll/vote",
+        &[
+            ("x-real-ip", "203.0.113.1".into()),
+            ("x-forwarded-for", "8.8.8.8, 203.0.113.1".into()),
+        ],
+        Some(json!({ "racerId": "ralbat" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    // The page remembers it was this connection that voted, even from a fresh browser.
+    let (_, _, again) = call_h(&h, "GET", "/api/poll", &from_ip("203.0.113.1"), None).await;
+    assert_eq!(again["voted"], "cuaco");
+    assert_eq!(again["totalVotes"], 1);
+
+    // Another connection counts; a second device of the same IPv6 /64 does not.
+    assert_eq!(vote(&h, "203.0.113.2", "ralbat").await.0, StatusCode::OK);
+    assert_eq!(
+        vote(&h, "2001:db8:1:2::10", "cuaco").await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        vote(&h, "2001:db8:1:2:aaaa::7", "ralbat").await.0,
+        StatusCode::CONFLICT
+    );
+
+    // Invalid choices and unidentifiable connections.
+    assert_eq!(
+        vote(&h, "203.0.113.3", "nadie").await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/poll/vote",
+        &[],
+        Some(json!({ "racerId": "cuaco" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/poll/vote",
+        &from_ip("203.0.113.4"),
+        Some(json!({ "racerId": "cuaco", "website": "http://spam" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "the honeypot catches scripts");
+
+    // Nothing but the salted hash is stored.
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT ip_hash FROM poll_votes")
+        .fetch_all(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 3);
+    assert!(rows.iter().all(|r| r.0.len() == 64 && !r.0.contains('.')));
+}
+
+#[tokio::test]
+async fn simultaneous_votes_from_one_connection_count_once() {
+    let h = harness().await;
+    event_not_started(&h).await;
+    let (a, b) = tokio::join!(
+        vote(&h, "198.51.100.7", "cuaco"),
+        vote(&h, "198.51.100.7", "ralbat")
+    );
+    let mut codes = [a.0, b.0];
+    codes.sort();
+    assert_eq!(codes, [StatusCode::OK, StatusCode::CONFLICT]);
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM poll_votes")
+        .fetch_one(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn the_poll_throttles_a_connection_that_hammers_it() {
+    let h = harness().await;
+    event_not_started(&h).await;
+    let mut last = StatusCode::OK;
+    for _ in 0..12 {
+        last = vote(&h, "198.51.100.9", "nadie").await.0;
+    }
+    assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
+    // Others are not affected.
+    assert_eq!(vote(&h, "198.51.100.10", "cuaco").await.0, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_poll_closes_when_the_event_starts_and_the_organizer_controls_it() {
+    let h = harness().await;
+    event_not_started(&h).await;
+    make_user(&h, "jefe", Role::Admin).await;
+    make_user(&h, "mod", Role::Moderator).await;
+    let admin = login_as(&h, "jefe").await;
+    let moderator = login_as(&h, "mod").await;
+    assert_eq!(vote(&h, "192.0.2.1", "cuaco").await.0, StatusCode::OK);
+
+    // Auto mode: once the event is live, voting is over and everyone sees the results.
+    make_event_live(&h).await;
+    let (s, _) = vote(&h, "192.0.2.2", "cuaco").await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (_, _, closed) = call_h(&h, "GET", "/api/poll", &from_ip("192.0.2.9"), None).await;
+    assert_eq!(closed["open"], false);
+    assert_eq!(closed["totalVotes"], 1);
+
+    // The organizer can reopen it by hand; moderators can look but not change.
+    let (s, _, _) = call_h(
+        &h,
+        "PUT",
+        "/api/admin/poll/mode",
+        &moderator.write(),
+        Some(json!({ "mode": "open" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, view) = call_h(&h, "GET", "/api/admin/poll", &moderator.read(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(view["totalVotes"], 1);
+    let (s, _, _) = call_h(
+        &h,
+        "PUT",
+        "/api/admin/poll/mode",
+        &admin.write(),
+        Some(json!({ "mode": "sometimes" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, m) = call_h(
+        &h,
+        "PUT",
+        "/api/admin/poll/mode",
+        &admin.write(),
+        Some(json!({ "mode": "open" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(m["open"], true);
+    assert_eq!(vote(&h, "192.0.2.2", "ralbat").await.0, StatusCode::OK);
+
+    // Reset: every vote goes, and the same connections may vote again.
+    let (s, _, wiped) = call_h(&h, "DELETE", "/api/admin/poll/votes", &admin.write(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(wiped["totalVotes"], 0);
+    assert_eq!(vote(&h, "192.0.2.1", "ralbat").await.0, StatusCode::OK);
+
+    let (_, _, log) = call_h(&h, "GET", "/api/admin/audit?limit=20", &admin.read(), None).await;
+    let actions: Vec<_> = log
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["action"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert!(actions.contains(&"poll.mode".to_string()), "{actions:?}");
+    assert!(actions.contains(&"poll.clear".to_string()), "{actions:?}");
+}

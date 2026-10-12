@@ -7,6 +7,7 @@ import { createMockRacers } from '@/data/mock/racers'
 import { createMockStandings } from '@/data/mock/standings'
 import { createMockStreams } from '@/data/mock/streams'
 import type { DonorsBoard } from '@/types/donors'
+import type { Poll } from '@/types/poll'
 import type { PublicDay } from '@/types/stats'
 import type { EventInfo, EventStatus } from '@/types/event'
 import type { HiveShockStats } from '@/types/hiveshock'
@@ -21,7 +22,7 @@ import type {
 import type { WsMessage } from '@/types/websocket'
 import { nextResetUtc } from '@/utils/time'
 import { computeStandings } from '@/utils/standings'
-import type { RaceApi } from '../api/RaceApi'
+import { ApiError, type RaceApi } from '../api/RaceApi'
 
 const delay = (ms = 350) => new Promise((r) => setTimeout(r, ms))
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)]
@@ -143,6 +144,47 @@ export class MockRaceService implements RaceApi {
     await delay(400)
     return { ...this.stats }
   }
+  /** The voter's own choice (the real server remembers it by address). */
+  private myVote: string | null = null
+
+  private pollView(): Poll {
+    const options = [...this.racers.values()].map((r) => ({
+      racerId: r.id,
+      name: r.displayName,
+      ...(r.avatarUrl ? { avatarUrl: r.avatarUrl } : {}),
+    }))
+    const poll: Poll = { open: true, mode: 'auto', options, voted: this.myVote }
+    if (this.myVote) {
+      // Some made-up votes so the results page has something to show.
+      const votes = options.map(
+        (o, i) => (options.length - i) * 7 + (o.racerId === this.myVote ? 1 : 0),
+      )
+      const total = votes.reduce((a, b) => a + b, 0)
+      poll.totalVotes = total
+      poll.results = options
+        .map((o, i) => ({
+          racerId: o.racerId,
+          votes: votes[i]!,
+          percent: Math.round((votes[i]! * 1000) / total) / 10,
+        }))
+        .sort((a, b) => b.votes - a.votes)
+    }
+    return poll
+  }
+
+  async getPoll(): Promise<Poll> {
+    await delay(200)
+    return this.pollView()
+  }
+
+  async vote(racerId: string): Promise<Poll> {
+    await delay(300)
+    if (this.myVote) throw new ApiError('http', 'conflict: you already voted', 409)
+    if (!this.racers.has(racerId)) throw new ApiError('not-found', 'not found', 404)
+    this.myVote = racerId
+    return this.pollView()
+  }
+
   async getRacerDays(): Promise<PublicDay[]> {
     await delay(300)
     return [

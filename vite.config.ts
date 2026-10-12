@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   server: {
     proxy: {
-      '/api': { target: proxyTarget, changeOrigin: false },
+      '/api': { target: proxyTarget, changeOrigin: false, xfwd: true },
       '/ws': { target: proxyTarget, ws: true },
       '/ingest': { target: proxyTarget, ws: true },
     },

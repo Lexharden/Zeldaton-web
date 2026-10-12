@@ -32,6 +32,8 @@ pub struct Hub {
     /// Failed-login throttles: per username and per client address.
     pub user_limiter: LoginLimiter,
     pub ip_limiter: LoginLimiter,
+    /// Attempts at the public poll per connection (every try counts, not only failures).
+    pub vote_limiter: LoginLimiter,
     /// Where the race engine and the organizer actions drop what is worth telling Discord about.
     /// The dispatcher takes the receiving end once (`take_notice_receiver`).
     notices_tx: UnboundedSender<Notice>,
@@ -62,6 +64,7 @@ impl Hub {
             conns: AtomicU64::new(1),
             user_limiter: LoginLimiter::new(5, std::time::Duration::from_secs(15 * 60)),
             ip_limiter: LoginLimiter::new(30, std::time::Duration::from_secs(15 * 60)),
+            vote_limiter: LoginLimiter::new(10, std::time::Duration::from_secs(60)),
             notices_tx,
             notices_rx: Mutex::new(Some(notices_rx)),
             notify: RwLock::new(NotifySettings::default()),

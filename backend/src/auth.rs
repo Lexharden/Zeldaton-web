@@ -88,6 +88,31 @@ pub fn clear_session_cookie(secure: bool) -> String {
     session_cookie("", secure, 0)
 }
 
+/// The connection a request came from, as the reverse proxy saw it. `X-Real-IP` is overwritten by
+/// nginx with the socket address, so a client cannot choose it; the first `X-Forwarded-For` entry
+/// can be forged, so only the last one (the hop nginx appended) is trusted as a fallback.
+/// IPv6 addresses collapse to their /64 (one subscriber can hold billions of them).
+pub fn client_ip(headers: &axum::http::HeaderMap) -> Option<String> {
+    let get = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let raw =
+        get("x-real-ip").or_else(|| get("x-forwarded-for").and_then(|v| v.rsplit(',').next()))?;
+    normalize_ip(raw)
+}
+
+pub fn normalize_ip(raw: &str) -> Option<String> {
+    use std::net::IpAddr;
+    match raw.trim().parse::<IpAddr>().ok()? {
+        IpAddr::V4(v4) => Some(v4.to_string()),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => Some(v4.to_string()),
+            None => {
+                let s = v6.segments();
+                Some(format!("{:x}:{:x}:{:x}:{:x}::/64", s[0], s[1], s[2], s[3]))
+            }
+        },
+    }
+}
+
 /// Failed-login throttle: after `max` failures inside `window` a key is locked until the window
 /// ends. In memory on purpose: a restart clears it, which is fine for a brute-force guard.
 pub struct LoginLimiter {

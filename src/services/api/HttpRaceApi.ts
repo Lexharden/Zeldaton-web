@@ -8,13 +8,18 @@ export class HttpRaceApi implements RaceApi {
     private timeoutMs = runtime.requestTimeoutMs,
   ) {}
 
-  private async request<T>(path: string): Promise<T> {
+  private async request<T>(path: string, body?: unknown): Promise<T> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
       const res = await fetch(`${this.baseUrl}${path}`, {
         signal: controller.signal,
-        headers: { Accept: 'application/json' },
+        method: body === undefined ? 'GET' : 'POST',
+        headers:
+          body === undefined
+            ? { Accept: 'application/json' }
+            : { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
       })
       if (res.status === 404) throw new ApiError('not-found', `Not found: ${path}`, 404)
       if (!res.ok) throw new ApiError('http', `HTTP ${res.status} for ${path}`, res.status)
@@ -49,5 +54,8 @@ export class HttpRaceApi implements RaceApi {
     this.request<Awaited<ReturnType<RaceApi['getRacerDays']>>>(
       `/racers/${encodeURIComponent(id)}/days`,
     )
+  getPoll = () => this.request<Awaited<ReturnType<RaceApi['getPoll']>>>('/poll')
+  vote = (racerId: string) =>
+    this.request<Awaited<ReturnType<RaceApi['vote']>>>('/poll/vote', { racerId })
   getClocks = () => this.request<Awaited<ReturnType<RaceApi['getClocks']>>>('/clocks')
 }

@@ -6,6 +6,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
   Activity,
   BarChart3,
+  Vote,
   BookOpen,
   CalendarClock,
   ExternalLink,
@@ -61,6 +62,7 @@ const nav = computed(() =>
     { name: 'admin-catalog', label: 'Catálogo', icon: BookOpen, role: 'admin' },
     { name: 'admin-donations', label: 'Donaciones', icon: Gift, role: 'moderator' },
     { name: 'admin-stats', label: 'Estadísticas', icon: BarChart3, role: 'moderator' },
+    { name: 'admin-poll', label: 'Encuesta', icon: Vote, role: 'moderator' },
     { name: 'admin-audit', label: 'Auditoría', icon: ScrollText, role: 'moderator' },
     { name: 'admin-accounts', label: 'Cuentas', icon: Users, role: 'admin' },
   ].filter((n) => n.role === 'moderator' || admin.isAdmin),

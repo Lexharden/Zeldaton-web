@@ -19,6 +19,7 @@ const links = [
   { label: 'nav.race', mobile: 'nav.liveRace', to: '/race' },
   { label: 'nav.racers', mobile: 'nav.racers', to: { path: '/', hash: '#racers' } },
   { label: 'nav.streams', mobile: 'nav.streams', to: '/streams' },
+  { label: 'nav.poll', mobile: 'nav.poll', to: '/encuesta' },
   { label: 'nav.rules', mobile: 'nav.rules', to: '/rules' },
 ]
 

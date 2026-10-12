@@ -12,6 +12,8 @@ export const es = {
       raceDesc: 'Posiciones, progreso y relojes en vivo de la carrera Zeldatón de Ocarina of Time.',
       streams: 'Transmisiones',
       streamsDesc: 'Mira a cada corredor de Zeldatón en vivo en Twitch y YouTube.',
+      poll: '¿Quién ganará?',
+      pollDesc: 'Vota quién crees que ganará Zeldatón. Un voto por conexión.',
       rules: 'Reglas',
       rulesDesc: 'Las reglas de la carrera comunitaria Zeldatón de Ocarina of Time.',
       hiveshock: 'HiveShock',
@@ -26,6 +28,7 @@ export const es = {
     racers: 'CORREDORES',
     streams: 'STREAMS',
     rules: 'REGLAS',
+    poll: 'ENCUESTA',
     hiveshock: 'HIVESHOCK',
     liveRace: 'CARRERA EN VIVO',
     live: 'EN VIVO',
@@ -164,6 +167,25 @@ export const es = {
     noStream: 'Este corredor no tiene stream vinculado.',
     liveStream: 'STREAM EN VIVO',
     stream: 'Stream de {name}',
+  },
+  poll: {
+    eyebrow: 'ENCUESTA',
+    title: '¿QUIÉN GANARÁ?',
+    subtitle:
+      'Elige al corredor que crees que cruzará primero la meta. Verás los resultados en cuanto votes.',
+    modalText: 'Antes de que empiece la carrera: ¿a quién le apuestas? Solo toma un momento.',
+    choose: 'Corredores',
+    vote: 'VOTAR',
+    sending: 'ENVIANDO…',
+    notNow: 'Ahora no',
+    oneVote:
+      'Un voto por conexión a internet. Solo guardamos una huella cifrada de tu conexión, nunca tu IP.',
+    yours: 'TU VOTO',
+    votes: '{n} votos',
+    total: '{n} votos en total',
+    thanks: '¡Gracias por votar! Así va la encuesta:',
+    closed: 'La encuesta está cerrada. Estos son los resultados finales.',
+    empty: 'Todavía no hay resultados.',
   },
   donors: {
     eyebrow: 'LA COMUNIDAD',
@@ -531,6 +553,10 @@ export const es = {
         {
           h: 'Donadores',
           p: 'Quienes donan en los streams de los corredores (regalos de TikTok, bits de Twitch) aparecen en el ranking público «Top donadores» con el nombre que esas plataformas informan, el tiempo que movieron y cuánto donaron. Si no quieres aparecer, pídenos quitarte por los canales oficiales del evento y te ocultamos del ranking.',
+        },
+        {
+          h: 'Encuesta «¿Quién ganará?»',
+          p: 'Para permitir un solo voto por conexión, al votar calculamos una huella cifrada (hash con una clave secreta) de tu dirección IP y guardamos esa huella junto a tu elección. No guardamos tu IP ni podemos recuperarla desde la huella. Las huellas se borran cuando el organizador reinicia la encuesta.',
         },
         {
           h: 'Qué datos usamos',

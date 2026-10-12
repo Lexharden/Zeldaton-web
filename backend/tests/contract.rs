@@ -356,6 +356,34 @@ fn rest_payloads_match_their_fixtures() {
             json!({ "donations": 9, "addedSeconds": 2100, "removedSeconds": 120 }),
         ),
     );
+    // The "who will win?" poll, as a connection that already voted sees it (results revealed).
+    {
+        use std::collections::HashMap;
+        use zeldathon_server::poll::{Mode, PollOption, poll_payload};
+        let options = vec![
+            PollOption {
+                racer_id: "cuaco".into(),
+                name: "Cuaco".into(),
+                avatar_url: Some("/api/media/racers/cuaco.webp".into()),
+            },
+            PollOption {
+                racer_id: "ralbat".into(),
+                name: "Ralbat".into(),
+                avatar_url: None,
+            },
+        ];
+        let counts: HashMap<String, i64> = [("cuaco".to_string(), 2), ("ralbat".to_string(), 1)]
+            .into_iter()
+            .collect();
+        check(
+            "rest/poll.json",
+            poll_payload(true, Mode::Auto, &options, &counts, Some("cuaco"), true),
+        );
+        check(
+            "rest/poll-unvoted.json",
+            poll_payload(true, Mode::Auto, &options, &counts, None, false),
+        );
+    }
     // A racer's game day as the public sees it (organizer internals are stripped).
     let day = json!({
         "racerId": "ralbat", "racerName": "Ralbat", "day": "2026-10-07", "playedSeconds": 12600,

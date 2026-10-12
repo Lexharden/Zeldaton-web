@@ -74,8 +74,21 @@ ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed O
 | Racers | Create/edit, **upload their photo** (shrunk in the browser; replaces the previous one), channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
 | Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. An item's **icon is just a file name** (`Hookshot-Art.png`) of a picture in `public/art/items`; the site loads it from that folder (a new picture needs a rebuild). The site and HiveShock update on their own |
 | Donations | Time that TikTok gifts / Twitch bits added or removed (the **rate per diamond / bit is set in Event → Time from donations** and computed by the server, default 3 s per diamond; the table shows what HiveShock asked when it differs), per racer (today and whole event), the **top donors** (who moved the clock most; shown publicly on the home page, you can hide one or switch the board off) and one by one |
+| Poll | The public **"Who will win?"** poll: when it is open (automatic = until the event starts, open, closed), live results and a reset of the votes. See "Public poll" below |
 | Audit | Who did what and when |
 | Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |
+
+### Public poll ("Who will win?")
+
+Visitors get a modal on entering the site (once a day if they pick "Not now") that leads to `/encuesta`.
+One vote per connection: the server hashes the visitor's address with a secret salt (never storing the
+IP; IPv6 counts by its /64) and the table's primary key rejects a second vote, even for simultaneous
+requests. The address is read from **`X-Real-IP`**, which the reverse proxy must set from the socket
+(`deploy/nginx.conf` does: `proxy_set_header X-Real-IP $remote_addr;`) — without it the poll refuses
+votes rather than counting everyone as one voter. Results stay hidden until the visitor has voted (or the
+poll is closed) so nobody votes with the crowd; attempts are throttled to 10 a minute per connection.
+Shared connections (a home, a school) count as one voter, and a VPN allows another vote: that is the
+trade-off of "one per IP". Reset the votes from the panel (Poll) before opening it for real.
 
 Security: Argon2id passwords, HttpOnly + SameSite=Strict session cookie (`Secure` automatic; force with
 `COOKIE_SECURE`), CSRF token on every write, 5 wrong logins lock a username for 15 minutes, and every session

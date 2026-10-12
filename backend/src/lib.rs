@@ -15,6 +15,7 @@ pub mod incidents;
 pub mod logbook;
 pub mod media;
 pub mod notify;
+pub mod poll;
 pub mod seed;
 pub mod standings;
 pub mod state;
