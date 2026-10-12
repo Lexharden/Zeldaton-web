@@ -2848,3 +2848,53 @@ async fn the_poll_closes_when_the_event_starts_and_the_organizer_controls_it() {
     assert!(actions.contains(&"poll.mode".to_string()), "{actions:?}");
     assert!(actions.contains(&"poll.clear".to_string()), "{actions:?}");
 }
+
+#[tokio::test]
+async fn the_same_browser_cannot_vote_again_from_another_address() {
+    let h = harness().await;
+    event_not_started(&h).await;
+    // First visit: the server hands the browser its token.
+    let (_, headers, _) = call_h(&h, "GET", "/api/poll", &from_ip("203.0.113.50"), None).await;
+    let set = headers.get("set-cookie").unwrap().to_str().unwrap();
+    assert!(
+        set.contains("HttpOnly") && set.contains("Path=/api/poll"),
+        "{set}"
+    );
+    let cookie = set.split(';').next().unwrap().to_string();
+
+    let with = |ip: &str| vec![("x-real-ip", ip.to_string()), ("cookie", cookie.clone())];
+    let ballot = |ip: &str, racer: &str| (with(ip), json!({ "racerId": racer }));
+
+    let (hdrs, body) = ballot("203.0.113.50", "cuaco");
+    let (s, _, _) = call_h(&h, "POST", "/api/poll/vote", &hdrs, Some(body)).await;
+    assert_eq!(s, StatusCode::OK);
+
+    // Same browser, now over IPv6 (or mobile data): refused, and the page knows it voted.
+    let (hdrs, body) = ballot("2001:db8:9::1", "ralbat");
+    let (s, _, _) = call_h(&h, "POST", "/api/poll/vote", &hdrs, Some(body)).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let (_, _, seen) = call_h(&h, "GET", "/api/poll", &with("2001:db8:9::1"), None).await;
+    assert_eq!(seen["voted"], "cuaco");
+    assert_eq!(seen["totalVotes"], 1);
+
+    // A different browser on that other address is a different voter.
+    assert_eq!(vote(&h, "2001:db8:9::1", "ralbat").await.0, StatusCode::OK);
+    // A forged or malformed token is ignored (treated as a browser without one).
+    let (s, _, _) = call_h(
+        &h,
+        "POST",
+        "/api/poll/vote",
+        &[
+            ("x-real-ip", "203.0.113.77".into()),
+            ("cookie", "zp=nope".into()),
+        ],
+        Some(json!({ "racerId": "cuaco" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM poll_votes")
+        .fetch_one(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 3);
+}

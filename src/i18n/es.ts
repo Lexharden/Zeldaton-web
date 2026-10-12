@@ -568,6 +568,7 @@ export const es = {
           items: [
             'Idioma (almacenamiento local, necesario): recuerda si ves la web en español o en inglés.',
             'Tu decisión sobre cookies (almacenamiento local, necesario): para no volver a preguntarte hasta que la cambies.',
+            'Encuesta (cookie «zp», necesaria): un código aleatorio para que un mismo navegador no vote dos veces; el servidor solo guarda su huella cifrada. Dura un año.',
             'Sesión del panel de organización (cookie, necesaria): solo para organizadores que inician sesión en /admin; caduca sola.',
             'Google Analytics 4 (cookies _ga y _ga_*, opcionales): solo si aceptas. Duran hasta 2 años.',
           ],

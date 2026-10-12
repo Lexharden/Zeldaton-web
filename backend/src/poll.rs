@@ -5,7 +5,9 @@ use std::collections::HashMap;
 
 use axum::Json;
 use axum::extract::State;
-use axum::http::HeaderMap;
+use axum::http::header::{COOKIE, SET_COOKIE};
+use axum::http::{HeaderMap, HeaderValue};
+use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use rand::RngExt;
 use serde::Deserialize;
@@ -19,6 +21,7 @@ use crate::hub::AppState;
 
 const MODE_KEY: &str = "poll_mode";
 const SALT_KEY: &str = "poll_salt";
+const DEVICE_COOKIE: &str = "zp";
 
 /// `auto`: open until the event starts. `open` / `closed`: the organizer decides.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -166,11 +169,15 @@ async fn counts(pool: &SqlitePool) -> Result<HashMap<String, i64>, sqlx::Error> 
     Ok(rows.into_iter().collect())
 }
 
-async fn voted_for(pool: &SqlitePool, hash: &str) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar("SELECT racer_id FROM poll_votes WHERE ip_hash = ?")
-        .bind(hash)
-        .fetch_optional(pool)
-        .await
+/// The racer this visitor voted for, matching either their connection or their browser.
+async fn voted_for(pool: &SqlitePool, who: &Who) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT racer_id FROM poll_votes WHERE ip_hash = ?1 OR (?2 IS NOT NULL AND device_hash = ?2) LIMIT 1",
+    )
+    .bind(&who.ip_hash)
+    .bind(&who.device_hash)
+    .fetch_optional(pool)
+    .await
 }
 
 fn options_of(hub: &AppState) -> Vec<PollOption> {
@@ -185,13 +192,13 @@ fn options_of(hub: &AppState) -> Vec<PollOption> {
 }
 
 /// Builds the payload for one viewer (`hash` = who is asking, `None` for the organizer's view).
-async fn build(hub: &AppState, hash: Option<&str>, organizer: bool) -> Result<Value, ApiError> {
+async fn build(hub: &AppState, who: Option<&Who>, organizer: bool) -> Result<Value, ApiError> {
     let m = mode(&hub.pool).await;
     let open = m.is_open(hub.event(Utc::now()).status);
     let options = options_of(hub);
     let counts = counts(&hub.pool).await.map_err(ApiError::internal)?;
-    let voted = match hash {
-        Some(h) => voted_for(&hub.pool, h).await.map_err(ApiError::internal)?,
+    let voted = match who {
+        Some(w) => voted_for(&hub.pool, w).await.map_err(ApiError::internal)?,
         None => None,
     };
     let reveal = organizer || voted.is_some() || !open;
@@ -205,20 +212,70 @@ async fn build(hub: &AppState, hash: Option<&str>, organizer: bool) -> Result<Va
     ))
 }
 
-async fn viewer_hash(hub: &AppState, headers: &HeaderMap) -> Result<(String, String), ApiError> {
+/// Who is asking: the connection (always) and the browser's token (when it has one).
+struct Who {
+    ip: String,
+    ip_hash: String,
+    /// Hash of the browser's `zp` cookie; `None` the first time, before it was handed out.
+    device_hash: Option<String>,
+    /// A fresh token to hand out, when the browser had none.
+    new_token: Option<String>,
+}
+
+async fn identify(hub: &AppState, headers: &HeaderMap) -> Result<Who, ApiError> {
     let ip = crate::auth::client_ip(headers)
         .ok_or_else(|| ApiError::BadRequest("could not identify the connection".into()))?;
     let salt = salt(&hub.pool).await.map_err(ApiError::internal)?;
-    Ok((ip_hash(&salt, &ip), ip))
+    let sent = crate::auth::cookie_value(
+        headers.get(COOKIE).and_then(|v| v.to_str().ok()),
+        DEVICE_COOKIE,
+    )
+    .filter(|t| t.len() == 32 && t.bytes().all(|b| b.is_ascii_hexdigit()));
+    let (token, new_token) = match sent {
+        Some(t) => (t.to_string(), None),
+        None => {
+            let mut bytes = [0u8; 16];
+            rand::rng().fill(&mut bytes);
+            let t = hex::encode(bytes);
+            (t.clone(), Some(t))
+        }
+    };
+    Ok(Who {
+        ip_hash: ip_hash(&salt, &ip),
+        device_hash: Some(ip_hash(&salt, &format!("device:{token}"))),
+        ip,
+        new_token,
+    })
+}
+
+/// Adds the device cookie to a response when the browser did not have one yet: unreadable by
+/// scripts, a year long, only sent to the poll.
+fn with_device_cookie(hub: &AppState, headers: &HeaderMap, who: &Who, body: Value) -> Response {
+    let mut res = Json(body).into_response();
+    if let Some(token) = &who.new_token {
+        let secure = crate::admin::cookie_secure(hub, headers);
+        let cookie = format!(
+            "{DEVICE_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/api/poll; Max-Age=31536000{}",
+            if secure { "; Secure" } else { "" }
+        );
+        if let Ok(v) = HeaderValue::from_str(&cookie) {
+            res.headers_mut().append(SET_COOKIE, v);
+        }
+    }
+    res
 }
 
 pub async fn get_poll(
     State(hub): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     // A request we cannot attribute still sees the options (just never as "already voted").
-    let hash = viewer_hash(&hub, &headers).await.ok().map(|(h, _)| h);
-    build(&hub, hash.as_deref(), false).await.map(Json)
+    let who = identify(&hub, &headers).await.ok();
+    let body = build(&hub, who.as_ref(), false).await?;
+    Ok(match who {
+        Some(w) => with_device_cookie(&hub, &headers, &w, body),
+        None => Json(body).into_response(),
+    })
 }
 
 #[derive(Deserialize)]
@@ -234,9 +291,9 @@ pub async fn vote(
     State(hub): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<VoteBody>,
-) -> Result<Json<Value>, ApiError> {
-    let (hash, ip) = viewer_hash(&hub, &headers).await?;
-    let key = format!("v:{ip}");
+) -> Result<Response, ApiError> {
+    let who = identify(&hub, &headers).await?;
+    let key = format!("v:{}", who.ip);
     hub.vote_limiter
         .check(&key)
         .map_err(ApiError::TooManyRequests)?;
@@ -252,10 +309,11 @@ pub async fn vote(
         return Err(ApiError::NotFound);
     }
     let done = sqlx::query(
-        "INSERT INTO poll_votes (ip_hash, racer_id, created_at) VALUES (?, ?, ?)
-         ON CONFLICT(ip_hash) DO NOTHING",
+        "INSERT INTO poll_votes (ip_hash, device_hash, racer_id, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT DO NOTHING",
     )
-    .bind(&hash)
+    .bind(&who.ip_hash)
+    .bind(&who.device_hash)
     .bind(&body.racer_id)
     .bind(crate::engine::iso(Utc::now()))
     .execute(&hub.pool)
@@ -264,7 +322,8 @@ pub async fn vote(
     if done.rows_affected() == 0 {
         return Err(ApiError::Conflict("you already voted".into()));
     }
-    build(&hub, Some(&hash), false).await.map(Json)
+    let out = build(&hub, Some(&who), false).await?;
+    Ok(with_device_cookie(&hub, &headers, &who, out))
 }
 
 // ---- organizer ----------------------------------------------------------------------------------

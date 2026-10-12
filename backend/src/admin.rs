@@ -113,7 +113,7 @@ fn is_local_host(host: &str) -> bool {
 
 /// Whether the session cookie gets the `Secure` flag: forced by COOKIE_SECURE, else on for HTTPS
 /// (also behind a proxy) and for any host except plain-http localhost.
-fn cookie_secure(hub: &AppState, headers: &HeaderMap) -> bool {
+pub(crate) fn cookie_secure(hub: &AppState, headers: &HeaderMap) -> bool {
     if let Some(forced) = hub.cfg.cookie_secure {
         return forced;
     }

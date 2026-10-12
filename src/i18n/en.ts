@@ -566,6 +566,7 @@ export const en: Messages = {
           items: [
             'Language (local storage, necessary): remembers whether you read the site in Spanish or English.',
             'Your cookie choice (local storage, necessary): so we do not ask again until you change it.',
+            'Poll (cookie "zp", necessary): a random code so one browser cannot vote twice; the server only stores its encrypted fingerprint. Lasts a year.',
             'Organizer panel session (cookie, necessary): only for organizers who sign in at /admin; it expires on its own.',
             'Google Analytics 4 (_ga and _ga_* cookies, optional): only if you accept. They last up to 2 years.',
           ],

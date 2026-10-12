@@ -87,6 +87,8 @@ requests. The address is read from **`X-Real-IP`**, which the reverse proxy must
 (`deploy/nginx.conf` does: `proxy_set_header X-Real-IP $remote_addr;`) — without it the poll refuses
 votes rather than counting everyone as one voter. Results stay hidden until the visitor has voted (or the
 poll is closed) so nobody votes with the crowd; attempts are throttled to 10 a minute per connection.
+The same browser is also recognised by a random `zp` cookie (HttpOnly, hashed server-side), so it cannot vote again
+after switching between IPv4 and IPv6 or between wifi and mobile data; either identity matching blocks the vote.
 Shared connections (a home, a school) count as one voter, and a VPN allows another vote: that is the
 trade-off of "one per IP". Reset the votes from the panel (Poll) before opening it for real.
 
