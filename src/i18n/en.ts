@@ -176,11 +176,13 @@ export const en: Messages = {
       'Pick the racer you think will cross the finish line first. You will see the results as soon as you vote.',
     modalText: 'Before the race starts: who are you betting on? It only takes a moment.',
     choose: 'Racers',
+    nameLabel: 'Your name',
+    namePlaceholder: 'Type your name or nickname',
     vote: 'VOTE',
     sending: 'SENDING…',
     notNow: 'Not now',
     oneVote:
-      'One vote per internet connection. We only keep an encrypted fingerprint of your connection, never your IP.',
+      'One vote per internet connection. The organizers see your name and your vote; we do not store your IP, only an encrypted fingerprint.',
     yours: 'YOUR VOTE',
     votes: '{n} votes',
     total: '{n} votes in total',
@@ -554,7 +556,7 @@ export const en: Messages = {
         },
         {
           h: '"Who will win?" poll',
-          p: 'To allow one vote per connection, when you vote we compute an encrypted fingerprint (a hash with a secret key) of your IP address and store it next to your choice. We do not store your IP and cannot recover it from the fingerprint. Fingerprints are deleted when the organizer resets the poll.',
+          p: 'To allow one vote per connection, when you vote we compute an encrypted fingerprint (a hash with a secret key) of your IP address and store it next to your choice and the name you type, which only the organizers see and is never published. We do not store your IP and cannot recover it from the fingerprint. Fingerprints are deleted when the organizer resets the poll.',
         },
         {
           h: 'What data we use',

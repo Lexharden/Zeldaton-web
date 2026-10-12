@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RefreshCw, Trash2 } from 'lucide-vue-next'
-import type { Poll, PollMode } from '@/types/poll'
+import type { AdminPoll, PollMode } from '@/types/poll'
 import PollResults from '@/components/poll/PollResults.vue'
 import { adminApi } from '../api/AdminApi'
 import { useAdminStore } from '../stores/admin'
 import { confirm } from '../composables/useConfirm'
+import { localDateTime } from '../format'
 import { messageOf, useToasts } from '../composables/useToasts'
 import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'
@@ -13,7 +14,7 @@ import StatCard from '../components/StatCard.vue'
 /** The public "who will win?" poll: state, live results and the reset. Only admins change anything. */
 const toasts = useToasts()
 const admin = useAdminStore()
-const poll = ref<Poll | null>(null)
+const poll = ref<AdminPoll | null>(null)
 const loading = ref(false)
 
 async function load() {
@@ -70,6 +71,24 @@ async function clearVotes() {
     toasts.error(messageOf(e))
   }
 }
+
+async function removeVote(id: number, name: string | null) {
+  const ok = await confirm({
+    title: 'Quitar voto',
+    message: `Se borra el voto de «${name ?? 'sin nombre'}». Esa conexión podrá votar de nuevo.`,
+    confirmLabel: 'Quitar',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    poll.value = await adminApi.deletePollVote(id)
+    toasts.success('Voto quitado.')
+  } catch (e) {
+    toasts.error(messageOf(e))
+  }
+}
+
+const nameOf = (id: string) => poll.value?.options.find((o) => o.racerId === id)?.name ?? id
 
 const leader = computed(() => {
   const p = poll.value
@@ -143,6 +162,43 @@ const leader = computed(() => {
         </div>
         <PollResults v-if="poll.results?.length" :poll="poll" />
         <p v-else class="text-sm text-muted">Todavía no hay corredores para votar.</p>
+      </section>
+
+      <section v-if="poll.voters.length" class="panel mt-6 p-4">
+        <h2 class="display mb-1 text-2xl text-white">Quién votó</h2>
+        <p class="mb-3 text-xs text-muted">
+          Los nombres solo los ves tú; la web pública nunca los muestra. Últimos
+          {{ poll.voters.length }} votos.
+        </p>
+        <div class="overflow-x-auto">
+          <table class="a-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Votó por</th>
+                <th>Cuándo</th>
+                <th v-if="admin.isAdmin"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="v in poll.voters" :key="v.id">
+                <td class="font-semibold text-white">{{ v.name ?? '—' }}</td>
+                <td>{{ nameOf(v.racerId) }}</td>
+                <td class="num">{{ localDateTime(v.at) }}</td>
+                <td v-if="admin.isAdmin" class="text-right">
+                  <button
+                    type="button"
+                    class="a-btn a-btn-sm a-btn-danger"
+                    :aria-label="`Quitar el voto de ${v.name ?? 'sin nombre'}`"
+                    @click="removeVote(v.id, v.name)"
+                  >
+                    <Trash2 class="size-4" />
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </template>
     <p v-else class="text-sm text-muted">Cargando…</p>

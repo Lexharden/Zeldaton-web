@@ -47,11 +47,11 @@ export const usePollStore = defineStore('poll', () => {
   }
 
   /** Casts the vote. Returns whether it counted (or the server says this connection already voted). */
-  async function vote(racerId: string): Promise<boolean> {
+  async function vote(racerId: string, name: string): Promise<boolean> {
     busy.value = true
     error.value = null
     try {
-      poll.value = await raceApi.vote(racerId)
+      poll.value = await raceApi.vote(racerId, name.trim())
       return true
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {

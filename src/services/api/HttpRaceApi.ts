@@ -55,7 +55,7 @@ export class HttpRaceApi implements RaceApi {
       `/racers/${encodeURIComponent(id)}/days`,
     )
   getPoll = () => this.request<Awaited<ReturnType<RaceApi['getPoll']>>>('/poll')
-  vote = (racerId: string) =>
-    this.request<Awaited<ReturnType<RaceApi['vote']>>>('/poll/vote', { racerId })
+  vote = (racerId: string, name: string) =>
+    this.request<Awaited<ReturnType<RaceApi['vote']>>>('/poll/vote', { racerId, name })
   getClocks = () => this.request<Awaited<ReturnType<RaceApi['getClocks']>>>('/clocks')
 }

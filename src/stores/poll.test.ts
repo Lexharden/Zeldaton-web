@@ -75,16 +75,23 @@ describe('poll store', () => {
   it('stores the results after a vote and reports a rejected one', async () => {
     const store = usePollStore()
     vi.spyOn(raceApi, 'vote').mockResolvedValueOnce(open('a'))
-    expect(await store.vote('a')).toBe(true)
+    expect(await store.vote('a', 'Ana')).toBe(true)
     expect(store.poll?.voted).toBe('a')
     expect(store.poll?.results).toHaveLength(2)
+  })
+
+  it('sends the voter name trimmed', async () => {
+    const store = usePollStore()
+    const spy = vi.spyOn(raceApi, 'vote').mockResolvedValueOnce(open('a'))
+    await store.vote('a', '  Ana  ')
+    expect(spy).toHaveBeenCalledWith('a', 'Ana')
   })
 
   it('treats "already voted" as done and re-reads the poll', async () => {
     const store = usePollStore()
     vi.spyOn(raceApi, 'vote').mockRejectedValueOnce(new ApiError('http', 'conflict', 409))
     vi.spyOn(raceApi, 'getPoll').mockResolvedValueOnce(open('b'))
-    expect(await store.vote('a')).toBe(true)
+    expect(await store.vote('a', 'Ana')).toBe(true)
     expect(store.poll?.voted).toBe('b')
     expect(store.error).toBeNull()
   })
@@ -92,7 +99,7 @@ describe('poll store', () => {
   it('keeps the visitor on the ballot with a message when the vote fails', async () => {
     const store = usePollStore()
     vi.spyOn(raceApi, 'vote').mockRejectedValueOnce(new ApiError('network', 'down'))
-    expect(await store.vote('a')).toBe(false)
+    expect(await store.vote('a', 'Ana')).toBe(false)
     expect(store.error).toBeTruthy()
     expect(store.busy).toBe(false)
   })

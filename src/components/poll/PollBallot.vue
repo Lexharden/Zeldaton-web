@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { t } from '@/i18n'
 import Avatar from '@/components/common/Avatar.vue'
-import type { PollOption } from '@/types/poll'
+import { NAME_MAX, NAME_MIN, type PollOption } from '@/types/poll'
 
 /** The racers to choose from and the vote button. Shared by the entry modal and the poll page. */
 defineProps<{ options: PollOption[]; busy?: boolean; error?: string | null }>()
-const emit = defineEmits<{ vote: [racerId: string] }>()
+const emit = defineEmits<{ vote: [racerId: string, name: string] }>()
 const chosen = ref<string | null>(null)
+const name = ref('')
+const nameOk = computed(() => {
+  const n = name.value.trim().replace(/\s+/g, ' ')
+  return n.length >= NAME_MIN && n.length <= NAME_MAX
+})
 </script>
 
 <template>
@@ -37,13 +42,25 @@ const chosen = ref<string | null>(null)
         }}</span>
       </button>
     </div>
+    <label class="mt-5 block">
+      <span class="hud-label">{{ t('poll.nameLabel') }}</span>
+      <input
+        v-model="name"
+        type="text"
+        :maxlength="NAME_MAX"
+        autocomplete="name"
+        :placeholder="t('poll.namePlaceholder')"
+        class="mt-2 w-full border border-line bg-white/[0.05] px-3 py-2 text-white placeholder:text-white/40 focus:border-accent focus:outline-none"
+        @keydown.enter.prevent="chosen && nameOk && !busy && emit('vote', chosen, name)"
+      />
+    </label>
     <p v-if="error" class="mt-3 text-sm text-[#ff8aa0]" role="alert">{{ error }}</p>
     <div class="mt-5 flex flex-wrap items-center gap-3">
       <button
         type="button"
         class="btn btn-primary"
-        :disabled="!chosen || busy"
-        @click="chosen && emit('vote', chosen)"
+        :disabled="!chosen || !nameOk || busy"
+        @click="chosen && emit('vote', chosen, name)"
       >
         {{ busy ? t('poll.sending') : t('poll.vote') }}
       </button>

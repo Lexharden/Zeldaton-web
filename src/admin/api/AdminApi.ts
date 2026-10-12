@@ -1,6 +1,6 @@
 import { runtime } from '@/config/runtime'
 import type { EventInfo } from '@/types/event'
-import type { Poll, PollMode } from '@/types/poll'
+import type { AdminPoll, PollMode } from '@/types/poll'
 import type { CatalogItem, CatalogObjective } from '@/types/catalog'
 import type { Racer } from '@/types/racer'
 import type {
@@ -169,9 +169,10 @@ export class AdminApi {
 
   // ---- "who will win?" poll
   /** The poll with its full results, whatever its mode. */
-  poll = () => this.request<Poll>('GET', '/poll')
-  setPollMode = (mode: PollMode) => this.request<Poll>('PUT', '/poll/mode', { mode })
-  clearPollVotes = () => this.request<Poll>('DELETE', '/poll/votes')
+  poll = () => this.request<AdminPoll>('GET', '/poll')
+  setPollMode = (mode: PollMode) => this.request<AdminPoll>('PUT', '/poll/mode', { mode })
+  clearPollVotes = () => this.request<AdminPoll>('DELETE', '/poll/votes')
+  deletePollVote = (id: number) => this.request<AdminPoll>('DELETE', `/poll/votes/${id}`)
 
   // ---- Discord notifications
   discord = () => this.request<DiscordStatus>('GET', '/discord')

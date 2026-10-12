@@ -55,8 +55,8 @@ watch(show, async (open) => {
   }
 })
 
-async function cast(racerId: string) {
-  if (await poll.vote(racerId)) await router.push({ name: 'poll' })
+async function cast(racerId: string, name: string) {
+  if (await poll.vote(racerId, name)) await router.push({ name: 'poll' })
 }
 </script>
 

@@ -90,7 +90,8 @@ poll is closed) so nobody votes with the crowd; attempts are throttled to 10 a m
 The same browser is also recognised by a random `zp` cookie (HttpOnly, hashed server-side), so it cannot vote again
 after switching between IPv4 and IPv6 or between wifi and mobile data; either identity matching blocks the vote.
 Shared connections (a home, a school) count as one voter, and a VPN allows another vote: that is the
-trade-off of "one per IP". Reset the votes from the panel (Poll) before opening it for real.
+trade-off of "one per IP". Voting asks for a name (2 to 40 characters); the panel's Poll page lists who voted (names are never public) and
+lets an admin remove a single vote. Reset the votes from the panel (Poll) before opening it for real.
 
 Security: Argon2id passwords, HttpOnly + SameSite=Strict session cookie (`Secure` automatic; force with
 `COOKIE_SECURE`), CSRF token on every write, 5 wrong logins lock a username for 15 minutes, and every session

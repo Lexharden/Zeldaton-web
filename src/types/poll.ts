@@ -26,3 +26,19 @@ export interface Poll {
   totalVotes?: number
   results?: PollResult[]
 }
+
+/** One row of the organizers' list of who voted. */
+export interface PollVoter {
+  id: number
+  /** Missing for votes cast before names were asked. */
+  name: string | null
+  racerId: string
+  at: string
+}
+
+export interface AdminPoll extends Poll {
+  voters: PollVoter[]
+}
+
+export const NAME_MIN = 2
+export const NAME_MAX = 40

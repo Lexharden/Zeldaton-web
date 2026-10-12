@@ -94,6 +94,7 @@ pub fn router(hub: AppState) -> Router<AppState> {
         .route("/poll", get(poll_view))
         .route("/poll/mode", put(poll_set_mode))
         .route("/poll/votes", delete(poll_clear))
+        .route("/poll/votes/{id}", delete(poll_delete_vote))
         .layer(middleware::from_fn_with_state(hub, authenticate));
     Router::new()
         .route("/auth/login", post(login))
@@ -1241,6 +1242,20 @@ async fn poll_set_mode(
         None,
         json!({ "mode": mode.as_str() }),
     );
+    crate::poll::admin_view(&hub).await.map(Json)
+}
+
+/// Removes one vote.
+async fn poll_delete_vote(
+    State(hub): State<AppState>,
+    Extension(p): Extension<Principal>,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, ApiError> {
+    p.require(Role::Admin)?;
+    if !crate::poll::delete_vote(&hub, id).await? {
+        return Err(ApiError::NotFound);
+    }
+    hub.audit_as(&p.actor, "poll.delete_vote", None, json!({ "id": id }));
     crate::poll::admin_view(&hub).await.map(Json)
 }
 

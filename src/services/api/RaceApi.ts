@@ -22,7 +22,7 @@ export interface RaceApi {
   getRacerDays(id: string): Promise<PublicDay[]>
   getPoll(): Promise<Poll>
   /** One vote per connection; rejects with status 409 if this connection already voted. */
-  vote(racerId: string): Promise<Poll>
+  vote(racerId: string, name: string): Promise<Poll>
 }
 
 export type ApiErrorKind = 'timeout' | 'http' | 'network' | 'malformed' | 'not-found'

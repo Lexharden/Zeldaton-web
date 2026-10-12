@@ -177,7 +177,8 @@ export class MockRaceService implements RaceApi {
     return this.pollView()
   }
 
-  async vote(racerId: string): Promise<Poll> {
+  async vote(racerId: string, name: string): Promise<Poll> {
+    if (name.trim().length < 2) throw new ApiError('http', 'bad request: name', 400)
     await delay(300)
     if (this.myVote) throw new ApiError('http', 'conflict: you already voted', 409)
     if (!this.racers.has(racerId)) throw new ApiError('not-found', 'not found', 404)

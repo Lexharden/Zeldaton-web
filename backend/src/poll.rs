@@ -80,6 +80,13 @@ async fn salt(pool: &SqlitePool) -> Result<String, sqlx::Error> {
         .map(|v| v.unwrap_or_default())
 }
 
+/// The name a voter typed, tidied: spaces collapsed, 2 to 40 characters, no control characters.
+pub fn clean_name(raw: &str) -> Option<String> {
+    let name = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let len = name.chars().count();
+    ((2..=40).contains(&len) && !name.chars().any(char::is_control)).then_some(name)
+}
+
 pub fn ip_hash(salt: &str, ip: &str) -> String {
     hex::encode(Sha256::digest(format!("{salt}:{ip}").as_bytes()))
 }
@@ -285,6 +292,8 @@ pub struct VoteBody {
     /// Honeypot: hidden in the page, so only a script fills it in.
     #[serde(default)]
     website: String,
+    #[serde(default)]
+    name: String,
 }
 
 pub async fn vote(
@@ -301,6 +310,8 @@ pub async fn vote(
     if !body.website.is_empty() {
         return Err(ApiError::BadRequest("invalid vote".into()));
     }
+    let name = clean_name(&body.name)
+        .ok_or_else(|| ApiError::BadRequest("write your name (2 to 40 characters)".into()))?;
     let open = mode(&hub.pool).await.is_open(hub.event(Utc::now()).status);
     if !open {
         return Err(ApiError::Forbidden("the poll is closed".into()));
@@ -309,11 +320,12 @@ pub async fn vote(
         return Err(ApiError::NotFound);
     }
     let done = sqlx::query(
-        "INSERT INTO poll_votes (ip_hash, device_hash, racer_id, created_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT DO NOTHING",
+        "INSERT INTO poll_votes (ip_hash, device_hash, voter_name, racer_id, created_at)
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
     )
     .bind(&who.ip_hash)
     .bind(&who.device_hash)
+    .bind(&name)
     .bind(&body.racer_id)
     .bind(crate::engine::iso(Utc::now()))
     .execute(&hub.pool)
@@ -330,7 +342,28 @@ pub async fn vote(
 
 /// Full results for the panel, whatever the mode.
 pub async fn admin_view(hub: &AppState) -> Result<Value, ApiError> {
-    build(hub, None, true).await
+    let mut out = build(hub, None, true).await?;
+    let rows: Vec<(i64, Option<String>, String, String)> = sqlx::query_as(
+        "SELECT rowid, voter_name, racer_id, created_at FROM poll_votes ORDER BY rowid DESC LIMIT 500",
+    )
+    .fetch_all(&hub.pool)
+    .await
+    .map_err(ApiError::internal)?;
+    out["voters"] = rows
+        .into_iter()
+        .map(|(id, name, racer_id, at)| json!({ "id": id, "name": name, "racerId": racer_id, "at": at }))
+        .collect();
+    Ok(out)
+}
+
+/// Removes one vote (a joke name, spam). Returns whether it existed.
+pub async fn delete_vote(hub: &AppState, id: i64) -> Result<bool, ApiError> {
+    sqlx::query("DELETE FROM poll_votes WHERE rowid = ?")
+        .bind(id)
+        .execute(&hub.pool)
+        .await
+        .map(|r| r.rows_affected() > 0)
+        .map_err(ApiError::internal)
 }
 
 pub async fn set_mode(hub: &AppState, m: Mode) -> Result<(), ApiError> {
@@ -408,6 +441,17 @@ mod tests {
         assert_eq!(ids, ["b", "a", "c"]);
         assert_eq!(rows[0].2, 60.0);
         assert_eq!(rows[1].2, 20.0);
+    }
+
+    #[test]
+    fn names_are_tidied_and_bounded() {
+        assert_eq!(clean_name("  Ana   María ").as_deref(), Some("Ana María"));
+        assert_eq!(clean_name("Zé").as_deref(), Some("Zé"));
+        assert_eq!(clean_name("A"), None);
+        assert_eq!(clean_name("   "), None);
+        assert_eq!(clean_name(&"x".repeat(41)), None);
+        assert!(clean_name(&"x".repeat(40)).is_some());
+        assert_eq!(clean_name("bad\u{0}name"), None);
     }
 
     #[test]

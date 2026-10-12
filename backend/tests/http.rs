@@ -2661,7 +2661,7 @@ async fn vote(h: &Harness, ip: &str, racer: &str) -> (StatusCode, Value) {
         "POST",
         "/api/poll/vote",
         &from_ip(ip),
-        Some(json!({ "racerId": racer })),
+        Some(json!({ "racerId": racer, "name": "Votante Prueba" })),
     )
     .await;
     (s, b)
@@ -2696,7 +2696,7 @@ async fn the_poll_takes_one_vote_per_connection_and_hides_results_until_you_vote
             ("x-real-ip", "203.0.113.1".into()),
             ("x-forwarded-for", "8.8.8.8, 203.0.113.1".into()),
         ],
-        Some(json!({ "racerId": "ralbat" })),
+        Some(json!({ "racerId": "ralbat", "name": "Ana" })),
     )
     .await;
     assert_eq!(s, StatusCode::CONFLICT);
@@ -2726,7 +2726,7 @@ async fn the_poll_takes_one_vote_per_connection_and_hides_results_until_you_vote
         "POST",
         "/api/poll/vote",
         &[],
-        Some(json!({ "racerId": "cuaco" })),
+        Some(json!({ "racerId": "cuaco", "name": "Ana" })),
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
@@ -2735,7 +2735,7 @@ async fn the_poll_takes_one_vote_per_connection_and_hides_results_until_you_vote
         "POST",
         "/api/poll/vote",
         &from_ip("203.0.113.4"),
-        Some(json!({ "racerId": "cuaco", "website": "http://spam" })),
+        Some(json!({ "racerId": "cuaco", "name": "Bot", "website": "http://spam" })),
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST, "the honeypot catches scripts");
@@ -2863,7 +2863,7 @@ async fn the_same_browser_cannot_vote_again_from_another_address() {
     let cookie = set.split(';').next().unwrap().to_string();
 
     let with = |ip: &str| vec![("x-real-ip", ip.to_string()), ("cookie", cookie.clone())];
-    let ballot = |ip: &str, racer: &str| (with(ip), json!({ "racerId": racer }));
+    let ballot = |ip: &str, racer: &str| (with(ip), json!({ "racerId": racer, "name": "Ana" }));
 
     let (hdrs, body) = ballot("203.0.113.50", "cuaco");
     let (s, _, _) = call_h(&h, "POST", "/api/poll/vote", &hdrs, Some(body)).await;
@@ -2888,7 +2888,7 @@ async fn the_same_browser_cannot_vote_again_from_another_address() {
             ("x-real-ip", "203.0.113.77".into()),
             ("cookie", "zp=nope".into()),
         ],
-        Some(json!({ "racerId": "cuaco" })),
+        Some(json!({ "racerId": "cuaco", "name": "Ana" })),
     )
     .await;
     assert_eq!(s, StatusCode::OK);
@@ -2897,4 +2897,76 @@ async fn the_same_browser_cannot_vote_again_from_another_address() {
         .await
         .unwrap();
     assert_eq!(n, 3);
+}
+
+#[tokio::test]
+async fn voting_needs_a_name_and_only_the_organizers_see_who_voted() {
+    let h = harness().await;
+    event_not_started(&h).await;
+    make_user(&h, "jefe", Role::Admin).await;
+    let admin = login_as(&h, "jefe").await;
+    let post = |ip: &str, body: Value| {
+        let headers = from_ip(ip);
+        let h = &h;
+        async move {
+            let (s, _, b) = call_h(h, "POST", "/api/poll/vote", &headers, Some(body)).await;
+            (s, b)
+        }
+    };
+    for bad in [
+        json!({ "racerId": "cuaco" }),
+        json!({ "racerId": "cuaco", "name": " " }),
+        json!({ "racerId": "cuaco", "name": "A" }),
+    ] {
+        assert_eq!(post("203.0.113.60", bad).await.0, StatusCode::BAD_REQUEST);
+    }
+    // A refused attempt did not use up the connection's vote.
+    let (s, public) = post(
+        "203.0.113.60",
+        json!({ "racerId": "cuaco", "name": "  Ana   María " }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(
+        !public.to_string().contains("Ana"),
+        "names are never public: {public}"
+    );
+    let (_, _, anon) = call_h(&h, "GET", "/api/poll", &from_ip("203.0.113.61"), None).await;
+    assert!(anon.get("voters").is_none());
+
+    let (s, _, view) = call_h(&h, "GET", "/api/admin/poll", &admin.read(), None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(view["voters"][0]["name"], "Ana María");
+    assert_eq!(view["voters"][0]["racerId"], "cuaco");
+
+    // The organizer can drop a single vote; that connection may vote again.
+    let id = view["voters"][0]["id"].as_i64().unwrap();
+    let (s, _, after) = call_h(
+        &h,
+        "DELETE",
+        &format!("/api/admin/poll/votes/{id}"),
+        &admin.write(),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(after["totalVotes"], 0);
+    let (s, _, _) = call_h(
+        &h,
+        "DELETE",
+        &format!("/api/admin/poll/votes/{id}"),
+        &admin.write(),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    assert_eq!(
+        post(
+            "203.0.113.60",
+            json!({ "racerId": "ralbat", "name": "Ana" })
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
 }

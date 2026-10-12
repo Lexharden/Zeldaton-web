@@ -175,11 +175,13 @@ export const es = {
       'Elige al corredor que crees que cruzará primero la meta. Verás los resultados en cuanto votes.',
     modalText: 'Antes de que empiece la carrera: ¿a quién le apuestas? Solo toma un momento.',
     choose: 'Corredores',
+    nameLabel: 'Tu nombre',
+    namePlaceholder: 'Escribe tu nombre o apodo',
     vote: 'VOTAR',
     sending: 'ENVIANDO…',
     notNow: 'Ahora no',
     oneVote:
-      'Un voto por conexión a internet. Solo guardamos una huella cifrada de tu conexión, nunca tu IP.',
+      'Un voto por conexión a internet. Los organizadores ven tu nombre y tu voto; no guardamos tu IP, solo una huella cifrada.',
     yours: 'TU VOTO',
     votes: '{n} votos',
     total: '{n} votos en total',
@@ -556,7 +558,7 @@ export const es = {
         },
         {
           h: 'Encuesta «¿Quién ganará?»',
-          p: 'Para permitir un solo voto por conexión, al votar calculamos una huella cifrada (hash con una clave secreta) de tu dirección IP y guardamos esa huella junto a tu elección. No guardamos tu IP ni podemos recuperarla desde la huella. Las huellas se borran cuando el organizador reinicia la encuesta.',
+          p: 'Para permitir un solo voto por conexión, al votar calculamos una huella cifrada (hash con una clave secreta) de tu dirección IP y guardamos esa huella junto a tu elección y el nombre que escribas, que solo ven los organizadores y no se publica. No guardamos tu IP ni podemos recuperarla desde la huella. Las huellas se borran cuando el organizador reinicia la encuesta.',
         },
         {
           h: 'Qué datos usamos',
