@@ -38,6 +38,8 @@ acknowledged but applied only once, so retries are safe.
 | `STREAM_STATE` | `live`, `viewers?` | The racer is (or is no longer) broadcasting on TikTok/Twitch and how many people watch. Accepted at any time while connected (no game session needed). Shown on the streams page; cleared automatically if HiveShock disconnects |
 | `TIME_DONATION` | `deltaSeconds`, `source: { platform, currency, amount, gift?, giftCount?, viewer? }` | A viewer donation changes the racer's time: positive adds, negative removes. **`id` is required.** See below. Reply: `TIME_APPLIED` |
 
+**Progress never goes backwards on a single reading.** A `GAME_PROGRESS` that lowers the percentage by more than 2 points, or leaves out an objective already completed (typical of a reading taken on a loading screen or menu), is held for 60 s and is not shown, ranked or sent to Discord. If any later report carries progress that does not go back, the held one is dropped; if nothing contradicts it for 60 s while the racer keeps playing, it is accepted (for example after loading another save).
+
 Catalog ids (objectives, items) live in the database and are edited from the organizer panel; read them with
 `GET /api/catalog` (enabled entries, each tagged `child` / `adult` / `both`). The factory catalog (~60 items, 10
 objectives) is in `backend/src/catalog.rs`. Anything not enabled in the catalog is rejected with `invalid`, so HiveShock

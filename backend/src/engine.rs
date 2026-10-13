@@ -20,6 +20,10 @@ pub fn iso(d: DateTime<Utc>) -> String {
 }
 
 /// Smallest rise in progress (percentage points) the engine reports as a possible jump...
+/// A report may lower the percentage by this much without being held (rounding, small corrections).
+const REGRESSION_PCT: f64 = 2.0;
+/// How long a report that lowers progress must stand, uncontradicted, before it is believed.
+const REGRESSION_HOLD_SECS: i64 = 60;
 const JUMP_REPORT_MIN: f64 = 5.0;
 /// ...and the longest span it looks at. The dispatcher applies the organizer's own thresholds.
 const JUMP_REPORT_MAX_SECS: i64 = 3600;
@@ -627,85 +631,30 @@ impl RaceState {
                     return Err(IngestError::OutOfSequence("no active session"));
                 }
                 let patch = self.sanitize_progress(progress)?;
-                let before_area = self.racers[i].racer.current_area.clone();
-                // A big rise in a short time is worth a referee's look: report the facts and let the
-                // dispatcher apply the organizer's thresholds.
-                if let Some(to) = patch.percentage {
-                    if let Some((at, from)) = self.racers[i].progress_mark
-                        && to - from >= JUMP_REPORT_MIN
-                    {
-                        let seconds = (now - at).num_seconds().max(0);
-                        if seconds <= JUMP_REPORT_MAX_SECS {
-                            fx.notices.push(Notice::new(
-                                Some(LiveInfo::from_state(self, i)),
-                                Detail::Jump { from, to, seconds },
-                                now,
-                            ));
+                if self.regresses(i, &patch) {
+                    // Most likely a reading taken while the game was loading or on a menu: keep it
+                    // aside and only believe it if nothing contradicts it for `REGRESSION_HOLD_SECS`.
+                    let from = self.racers[i].racer.progress_percentage;
+                    let hold = &mut self.racers[i].progress_hold;
+                    match hold {
+                        Some(h) => h.patch = patch,
+                        None => {
+                            tracing::warn!(
+                                racer = %racer_id,
+                                from,
+                                to = ?patch.percentage,
+                                "progress went backwards: held until it is confirmed"
+                            );
+                            *hold = Some(ProgressHold { since: now, patch });
                         }
                     }
-                    // The reference point moves when progress changes; a rise is measured from the
-                    // lowest recent value so a slow climb cannot hide a jump.
-                    let keep = self.racers[i].progress_mark.filter(|(at, from)| {
-                        to >= *from && (now - *at).num_seconds() <= JUMP_REPORT_MAX_SECS
-                    });
-                    self.racers[i].progress_mark = keep.or(Some((now, to)));
-                }
-                let before_pct = self.racers[i].racer.progress_percentage;
-                let mut objectives_gained = 0i64;
-                let r = &mut self.racers[i].racer;
-                if let Some(p) = patch.percentage {
-                    r.progress_percentage = p;
-                }
-                if let Some(a) = &patch.current_area {
-                    r.current_area = Some(a.clone());
-                }
-                if let Some(o) = &patch.current_objective {
-                    r.current_objective = Some(o.clone());
-                }
-                if let Some(c) = &patch.completed_objectives {
-                    let required = &self.event.rules.required_objective_ids;
-                    let count =
-                        |list: &[String]| list.iter().filter(|id| required.contains(id)).count();
-                    if count(c) != count(&r.completed_objectives) {
-                        r.milestone_at_utc = Some(iso(now));
+                } else {
+                    // A report that carries progress and does not go back overrules a held one.
+                    if patch.percentage.is_some() || patch.completed_objectives.is_some() {
+                        self.racers[i].progress_hold = None;
                     }
-                    objectives_gained =
-                        (count(c) as i64 - count(&r.completed_objectives) as i64).max(0);
-                    r.completed_objectives = c.clone();
+                    self.apply_progress(i, patch, now, &mut fx);
                 }
-                {
-                    let day = self.racers[i].day();
-                    day.objectives += objectives_gained;
-                    if let Some(p) = patch.percentage {
-                        day.progress_start.get_or_insert(before_pct);
-                        day.progress_end = Some(p);
-                    }
-                }
-                fx.touch(i);
-                fx.msgs.push(WsMessage::GameProgress {
-                    racer_id: racer_id.to_string(),
-                    progress: patch.clone(),
-                });
-                if let Some(area) = patch
-                    .current_area
-                    .filter(|a| Some(a) != before_area.as_ref())
-                {
-                    self.racers[i].day().areas += 1;
-                    self.note(
-                        &mut fx,
-                        now,
-                        ActivityKind::Area,
-                        Some(i),
-                        "AREA_CHANGED",
-                        format!("{name} entered {area}"),
-                        Some(area.to_uppercase().replace('-', "_")),
-                        Some(area),
-                    );
-                }
-                self.bump(&mut fx, |s| {
-                    s.game_events += 1;
-                    s.progress_events += 1;
-                });
             }
             IngestMsg::ItemAcquired { item } => {
                 if !playing {
@@ -1098,6 +1047,128 @@ impl RaceState {
         })))
     }
 
+    /// Applies a progress report to the racer: state, statistics, the public message and the notes.
+    fn apply_progress(
+        &mut self,
+        i: usize,
+        patch: GameProgressPatch,
+        now: DateTime<Utc>,
+        fx: &mut Fx,
+    ) {
+        let racer_id = self.racers[i].racer.id.clone();
+        let name = self.racers[i].racer.display_name.clone();
+        let before_area = self.racers[i].racer.current_area.clone();
+        // A big rise in a short time is worth a referee's look: report the facts and let the
+        // dispatcher apply the organizer's thresholds.
+        if let Some(to) = patch.percentage {
+            if let Some((at, from)) = self.racers[i].progress_mark
+                && to - from >= JUMP_REPORT_MIN
+            {
+                let seconds = (now - at).num_seconds().max(0);
+                if seconds <= JUMP_REPORT_MAX_SECS {
+                    fx.notices.push(Notice::new(
+                        Some(LiveInfo::from_state(self, i)),
+                        Detail::Jump { from, to, seconds },
+                        now,
+                    ));
+                }
+            }
+            // The reference point moves when progress changes; a rise is measured from the
+            // lowest recent value so a slow climb cannot hide a jump.
+            let keep = self.racers[i].progress_mark.filter(|(at, from)| {
+                to >= *from && (now - *at).num_seconds() <= JUMP_REPORT_MAX_SECS
+            });
+            self.racers[i].progress_mark = keep.or(Some((now, to)));
+        }
+        let before_pct = self.racers[i].racer.progress_percentage;
+        let mut objectives_gained = 0i64;
+        let r = &mut self.racers[i].racer;
+        if let Some(p) = patch.percentage {
+            r.progress_percentage = p;
+        }
+        if let Some(a) = &patch.current_area {
+            r.current_area = Some(a.clone());
+        }
+        if let Some(o) = &patch.current_objective {
+            r.current_objective = Some(o.clone());
+        }
+        if let Some(c) = &patch.completed_objectives {
+            let required = &self.event.rules.required_objective_ids;
+            let count = |list: &[String]| list.iter().filter(|id| required.contains(id)).count();
+            if count(c) != count(&r.completed_objectives) {
+                r.milestone_at_utc = Some(iso(now));
+            }
+            objectives_gained = (count(c) as i64 - count(&r.completed_objectives) as i64).max(0);
+            r.completed_objectives = c.clone();
+        }
+        {
+            let day = self.racers[i].day();
+            day.objectives += objectives_gained;
+            if let Some(p) = patch.percentage {
+                day.progress_start.get_or_insert(before_pct);
+                day.progress_end = Some(p);
+            }
+        }
+        fx.touch(i);
+        fx.msgs.push(WsMessage::GameProgress {
+            racer_id: racer_id.clone(),
+            progress: patch.clone(),
+        });
+        if let Some(area) = patch
+            .current_area
+            .filter(|a| Some(a) != before_area.as_ref())
+        {
+            self.racers[i].day().areas += 1;
+            self.note(
+                fx,
+                now,
+                ActivityKind::Area,
+                Some(i),
+                "AREA_CHANGED",
+                format!("{name} entered {area}"),
+                Some(area.to_uppercase().replace('-', "_")),
+                Some(area),
+            );
+        }
+        self.bump(fx, |s| {
+            s.game_events += 1;
+            s.progress_events += 1;
+        });
+    }
+
+    /// Whether a report would lower what is recorded: the percentage by more than the tolerance, or
+    /// an objective that was already completed missing from the list.
+    fn regresses(&self, i: usize, patch: &GameProgressPatch) -> bool {
+        let r = &self.racers[i].racer;
+        patch
+            .percentage
+            .is_some_and(|p| p < r.progress_percentage - REGRESSION_PCT)
+            || patch
+                .completed_objectives
+                .as_ref()
+                .is_some_and(|c| r.completed_objectives.iter().any(|id| !c.contains(id)))
+    }
+
+    /// Applies the held backwards report once it stood for long enough, drops it when the racer is
+    /// no longer playing (nobody can vouch for it any more).
+    fn settle_progress_hold(&mut self, i: usize, now: DateTime<Utc>, fx: &mut Fx) {
+        let Some(hold) = &self.racers[i].progress_hold else {
+            return;
+        };
+        let playing = matches!(
+            self.racers[i].racer.status,
+            RacerStatus::Live | RacerStatus::Paused
+        );
+        if !playing {
+            self.racers[i].progress_hold = None;
+        } else if (now - hold.since).num_seconds() >= REGRESSION_HOLD_SECS {
+            let patch = hold.patch.clone();
+            self.racers[i].progress_hold = None;
+            tracing::warn!(racer = %self.racers[i].racer.id, to = ?patch.percentage, "backwards progress confirmed");
+            self.apply_progress(i, patch, now, fx);
+        }
+    }
+
     fn sanitize_progress(
         &self,
         mut p: GameProgressPatch,
@@ -1209,6 +1280,7 @@ impl RaceState {
             if now >= self.racers[i].reset_at {
                 self.daily_reset(i, now, &mut fx);
             }
+            self.settle_progress_hold(i, now, &mut fx);
             let r = &self.racers[i];
             if r.racer.status == RacerStatus::Live && r.checkpoint.remaining(true, now) <= 0 {
                 self.exhaust(i, now, &mut fx);
@@ -1710,6 +1782,7 @@ impl RaceState {
             r.donation_removed_ms = 0;
             r.donation_ids.clear();
             r.progress_mark = None;
+            r.progress_hold = None;
             r.day_pending.clear();
             r.racer.progress_percentage = 0.0;
             r.racer.current_area = None;
@@ -1793,6 +1866,7 @@ impl RaceState {
             donation_removed_ms: 0,
             donation_ids: HashSet::new(),
             progress_mark: None,
+            progress_hold: None,
             day_pending: Vec::new(),
         });
         let i = self.racers.len() - 1;

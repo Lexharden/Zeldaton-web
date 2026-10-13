@@ -665,6 +665,7 @@ pub async fn load(pool: &SqlitePool) -> Result<Option<RaceState>, sqlx::Error> {
             donation_removed_ms: r.get("donation_removed_ms"),
             donation_ids: donation_ids.remove(&id).unwrap_or_default(),
             progress_mark: None,
+            progress_hold: None,
             day_pending: Vec::new(),
         });
     }

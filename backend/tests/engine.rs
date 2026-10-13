@@ -1692,3 +1692,152 @@ fn running_out_of_time_and_the_event_reset_are_counted_and_cleared() {
             .any(|op| matches!(op, PersistOp::ClearRaceData))
     );
 }
+
+// ---- a report that goes backwards is held until it is confirmed ---------------------------------
+
+fn report(s: &mut RaceState, pct: Option<f64>, done: Option<&[&str]>, now: DateTime<Utc>) -> Fx {
+    ingest(
+        s,
+        "ralbat",
+        IngestMsg::GameProgress {
+            progress: GameProgressPatch {
+                percentage: pct,
+                completed_objectives: done.map(|d| d.iter().map(|x| x.to_string()).collect()),
+                ..Default::default()
+            },
+        },
+        now,
+    )
+    .unwrap()
+    .0
+}
+
+fn pct(s: &RaceState, now: DateTime<Utc>) -> f64 {
+    s.view(s.idx("ralbat").unwrap(), now).progress_percentage
+}
+
+#[test]
+fn an_empty_reading_is_ignored_when_the_next_report_contradicts_it() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    report(
+        &mut s,
+        Some(40.0),
+        Some(&["kokiri-forest", "deku-tree"]),
+        t0(),
+    );
+
+    // The game was on a loading screen: 0 % and nothing completed.
+    let at = t0() + Duration::seconds(10);
+    let fx = report(&mut s, Some(0.0), Some(&[]), at);
+    assert!(
+        !kinds(&fx).contains(&"GAME_PROGRESS".to_string()),
+        "never reaches the public"
+    );
+    assert_eq!(pct(&s, at), 40.0);
+    assert_eq!(
+        s.view(s.idx("ralbat").unwrap(), at)
+            .completed_objectives
+            .len(),
+        2
+    );
+
+    // Back to normal a moment later: the held reading is dropped for good.
+    let fx = report(
+        &mut s,
+        Some(41.0),
+        Some(&["kokiri-forest", "deku-tree"]),
+        at + Duration::seconds(5),
+    );
+    assert!(kinds(&fx).contains(&"GAME_PROGRESS".to_string()));
+    s.tick(at + Duration::seconds(300), i64::MAX);
+    assert_eq!(pct(&s, at + Duration::seconds(300)), 41.0);
+}
+
+#[test]
+fn a_lower_reading_that_stands_is_believed_after_the_hold() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    report(
+        &mut s,
+        Some(40.0),
+        Some(&["kokiri-forest", "deku-tree"]),
+        t0(),
+    );
+
+    let at = t0() + Duration::seconds(10);
+    report(&mut s, Some(12.0), Some(&["kokiri-forest"]), at);
+    s.tick(at + Duration::seconds(30), i64::MAX); // too soon
+    assert_eq!(pct(&s, at), 40.0);
+    // Still the same value afterwards (a new save was loaded): it is accepted.
+    let later = at + Duration::seconds(61);
+    let fx = s.tick(later, i64::MAX);
+    assert!(kinds(&fx).contains(&"GAME_PROGRESS".to_string()));
+    assert_eq!(pct(&s, later), 12.0);
+    assert_eq!(
+        s.view(s.idx("ralbat").unwrap(), later).completed_objectives,
+        vec!["kokiri-forest"]
+    );
+}
+
+#[test]
+fn losing_a_completed_objective_counts_as_going_backwards() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    report(
+        &mut s,
+        Some(40.0),
+        Some(&["kokiri-forest", "deku-tree"]),
+        t0(),
+    );
+    let at = t0() + Duration::seconds(5);
+    report(&mut s, None, Some(&["kokiri-forest"]), at);
+    assert_eq!(
+        s.view(s.idx("ralbat").unwrap(), at)
+            .completed_objectives
+            .len(),
+        2
+    );
+    // Gaining one is normal and applies right away.
+    report(
+        &mut s,
+        None,
+        Some(&["kokiri-forest", "deku-tree", "dodongos-cavern"]),
+        at,
+    );
+    assert_eq!(
+        s.view(s.idx("ralbat").unwrap(), at)
+            .completed_objectives
+            .len(),
+        3
+    );
+}
+
+#[test]
+fn small_dips_and_normal_climbs_apply_immediately() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    report(&mut s, Some(40.0), None, t0());
+    report(&mut s, Some(38.5), None, t0() + Duration::seconds(5)); // within tolerance
+    assert_eq!(pct(&s, t0() + Duration::seconds(5)), 38.5);
+    report(&mut s, Some(55.0), None, t0() + Duration::seconds(9));
+    assert_eq!(pct(&s, t0() + Duration::seconds(9)), 55.0);
+}
+
+#[test]
+fn a_held_reading_is_dropped_when_the_racer_stops_playing() {
+    let mut s = state(t0());
+    start(&mut s, "ralbat", t0());
+    report(&mut s, Some(40.0), None, t0());
+    let at = t0() + Duration::seconds(5);
+    report(&mut s, Some(0.0), None, at);
+    ingest(
+        &mut s,
+        "ralbat",
+        IngestMsg::SessionEnded,
+        at + Duration::seconds(2),
+    )
+    .unwrap();
+    s.tick(at + Duration::seconds(200), i64::MAX);
+    assert_eq!(pct(&s, at), 40.0, "nobody vouched for the 0 %");
+}

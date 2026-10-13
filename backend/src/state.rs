@@ -26,6 +26,13 @@ pub struct IngestHandle {
     pub tx: UnboundedSender<IngestDown>,
 }
 
+/// A progress report kept aside because it went backwards; see `RaceState::regresses`.
+#[derive(Clone, Debug)]
+pub struct ProgressHold {
+    pub since: DateTime<Utc>,
+    pub patch: crate::domain::GameProgressPatch,
+}
+
 pub struct RacerRuntime {
     /// Identity + telemetry. `status` is authoritative; times are derived on read.
     pub racer: Racer,
@@ -49,6 +56,8 @@ pub struct RacerRuntime {
     pub donation_ids: HashSet<String>,
     /// Reference point to spot a sudden jump in progress: (when, percentage).
     pub progress_mark: Option<(DateTime<Utc>, f64)>,
+    /// A report that would lower the progress, waiting to be confirmed (or contradicted).
+    pub progress_hold: Option<ProgressHold>,
     /// Statistics not yet handed to the persistence queue, one entry per game day (see `flush`).
     pub day_pending: Vec<crate::db::DayDelta>,
 }
