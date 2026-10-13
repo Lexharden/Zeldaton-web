@@ -174,7 +174,8 @@ export const en: Messages = {
     title: 'WHO WILL WIN?',
     subtitle:
       'Pick the racer you think will cross the finish line first. You will see the results as soon as you vote.',
-    modalText: 'Before the race starts: who are you betting on? It only takes a moment.',
+    modalText:
+      'Who do you think will cross the finish line first? Vote and see how the poll stands.',
     choose: 'Racers',
     nameLabel: 'Your name',
     namePlaceholder: 'Type your name or nickname',

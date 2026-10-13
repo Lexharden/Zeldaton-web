@@ -13,7 +13,7 @@ export const es = {
       streams: 'Transmisiones',
       streamsDesc: 'Mira a cada corredor de Zeldatón en vivo en Twitch y YouTube.',
       poll: '¿Quién ganará?',
-      pollDesc: 'Vota quién crees que ganará Zeldatón. Un voto por conexión.',
+      pollDesc: 'Vota quién crees que ganará Zeldatón y mira los resultados. Un voto por conexión.',
       rules: 'Reglas',
       rulesDesc: 'Las reglas de la carrera comunitaria Zeldatón de Ocarina of Time.',
       hiveshock: 'HiveShock',
@@ -173,7 +173,7 @@ export const es = {
     title: '¿QUIÉN GANARÁ?',
     subtitle:
       'Elige al corredor que crees que cruzará primero la meta. Verás los resultados en cuanto votes.',
-    modalText: 'Antes de que empiece la carrera: ¿a quién le apuestas? Solo toma un momento.',
+    modalText: '¿Quién crees que cruzará primero la meta? Vota y mira cómo va la encuesta.',
     choose: 'Corredores',
     nameLabel: 'Tu nombre',
     namePlaceholder: 'Escribe tu nombre o apodo',
