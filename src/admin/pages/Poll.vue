@@ -39,9 +39,9 @@ const MODES: { value: PollMode; label: string; hint: string }[] = [
   {
     value: 'auto',
     label: 'Automática',
-    hint: 'Abierta hasta que empiece el evento; después se cierra sola.',
+    hint: 'Abierta durante la carrera; se cierra sola cuando alguien gana o el evento termina.',
   },
-  { value: 'open', label: 'Abierta', hint: 'Se puede votar aunque el evento ya haya empezado.' },
+  { value: 'open', label: 'Abierta', hint: 'Se puede votar siempre, incluso si ya hay ganador.' },
   { value: 'closed', label: 'Cerrada', hint: 'Nadie puede votar; la web muestra los resultados.' },
 ]
 

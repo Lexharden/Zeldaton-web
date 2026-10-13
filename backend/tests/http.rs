@@ -2781,7 +2781,7 @@ async fn the_poll_throttles_a_connection_that_hammers_it() {
 }
 
 #[tokio::test]
-async fn the_poll_closes_when_the_event_starts_and_the_organizer_controls_it() {
+async fn the_poll_closes_when_the_race_ends_and_the_organizer_controls_it() {
     let h = harness().await;
     event_not_started(&h).await;
     make_user(&h, "jefe", Role::Admin).await;
@@ -2790,13 +2790,24 @@ async fn the_poll_closes_when_the_event_starts_and_the_organizer_controls_it() {
     let moderator = login_as(&h, "mod").await;
     assert_eq!(vote(&h, "192.0.2.1", "cuaco").await.0, StatusCode::OK);
 
-    // Auto mode: once the event is live, voting is over and everyone sees the results.
+    // Auto mode keeps voting open while the race runs...
     make_event_live(&h).await;
+    assert_eq!(vote(&h, "192.0.2.3", "ralbat").await.0, StatusCode::OK);
+    // ...and closes it for good when the race is over: everyone sees the final results.
+    let (s, _) = call(
+        &h,
+        "PUT",
+        "/api/admin/event",
+        Some(ADMIN),
+        Some(json!({ "status": "finished" })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
     let (s, _) = vote(&h, "192.0.2.2", "cuaco").await;
     assert_eq!(s, StatusCode::FORBIDDEN);
     let (_, _, closed) = call_h(&h, "GET", "/api/poll", &from_ip("192.0.2.9"), None).await;
     assert_eq!(closed["open"], false);
-    assert_eq!(closed["totalVotes"], 1);
+    assert_eq!(closed["totalVotes"], 2);
 
     // The organizer can reopen it by hand; moderators can look but not change.
     let (s, _, _) = call_h(
@@ -2810,7 +2821,7 @@ async fn the_poll_closes_when_the_event_starts_and_the_organizer_controls_it() {
     assert_eq!(s, StatusCode::FORBIDDEN);
     let (s, _, view) = call_h(&h, "GET", "/api/admin/poll", &moderator.read(), None).await;
     assert_eq!(s, StatusCode::OK);
-    assert_eq!(view["totalVotes"], 1);
+    assert_eq!(view["totalVotes"], 2);
     let (s, _, _) = call_h(
         &h,
         "PUT",

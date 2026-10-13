@@ -23,7 +23,8 @@ const MODE_KEY: &str = "poll_mode";
 const SALT_KEY: &str = "poll_salt";
 const DEVICE_COOKIE: &str = "zp";
 
-/// `auto`: open until the event starts. `open` / `closed`: the organizer decides.
+/// `auto`: open until the race is over (someone wins or the event ends). `open` / `closed`: the
+/// organizer decides.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
     Auto,
@@ -49,13 +50,18 @@ impl Mode {
         }
     }
 
-    pub fn is_open(self, status: EventStatus) -> bool {
+    pub fn is_open(self, race_over: bool) -> bool {
         match self {
-            Mode::Auto => status == EventStatus::Upcoming,
+            Mode::Auto => !race_over,
             Mode::Open => true,
             Mode::Closed => false,
         }
     }
+}
+
+/// The race is over once somebody crossed the finish line or the event was finished.
+pub fn race_over(hub: &AppState) -> bool {
+    hub.event(Utc::now()).status == EventStatus::Finished || hub.read(|s| s.winner.is_some())
 }
 
 pub async fn mode(pool: &SqlitePool) -> Mode {
@@ -201,7 +207,7 @@ fn options_of(hub: &AppState) -> Vec<PollOption> {
 /// Builds the payload for one viewer (`hash` = who is asking, `None` for the organizer's view).
 async fn build(hub: &AppState, who: Option<&Who>, organizer: bool) -> Result<Value, ApiError> {
     let m = mode(&hub.pool).await;
-    let open = m.is_open(hub.event(Utc::now()).status);
+    let open = m.is_open(race_over(hub));
     let options = options_of(hub);
     let counts = counts(&hub.pool).await.map_err(ApiError::internal)?;
     let voted = match who {
@@ -312,7 +318,7 @@ pub async fn vote(
     }
     let name = clean_name(&body.name)
         .ok_or_else(|| ApiError::BadRequest("write your name (2 to 40 characters)".into()))?;
-    let open = mode(&hub.pool).await.is_open(hub.event(Utc::now()).status);
+    let open = mode(&hub.pool).await.is_open(race_over(&hub));
     if !open {
         return Err(ApiError::Forbidden("the poll is closed".into()));
     }
@@ -471,10 +477,10 @@ mod tests {
     }
 
     #[test]
-    fn auto_closes_when_the_event_starts() {
-        assert!(Mode::Auto.is_open(EventStatus::Upcoming));
-        assert!(!Mode::Auto.is_open(EventStatus::Live));
-        assert!(Mode::Open.is_open(EventStatus::Live));
-        assert!(!Mode::Closed.is_open(EventStatus::Upcoming));
+    fn auto_closes_when_the_race_is_over() {
+        assert!(Mode::Auto.is_open(false));
+        assert!(!Mode::Auto.is_open(true));
+        assert!(Mode::Open.is_open(true));
+        assert!(!Mode::Closed.is_open(false));
     }
 }

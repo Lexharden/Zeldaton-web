@@ -74,7 +74,7 @@ ADMIN_PASSWORD=<at least 12 characters>      # empty = a random one is printed O
 | Racers | Create/edit, **upload their photo** (shrunk in the browser; replaces the previous one), channels, **token** (shown once, rotate), control: pause, close game, adjust time (with reason), reset day, finish |
 | Catalog | Items and objectives by **Child / Adult / Both Link** (~60 factory items): create, edit, hide, reorder. An item's **icon is just a file name** (`Hookshot-Art.png`) of a picture in `public/art/items`; the site loads it from that folder (a new picture needs a rebuild). The site and HiveShock update on their own |
 | Donations | Time that TikTok gifts / Twitch bits added or removed (the **rate per diamond / bit is set in Event → Time from donations** and computed by the server, default 3 s per diamond; the table shows what HiveShock asked when it differs), per racer (today and whole event), the **top donors** (who moved the clock most; shown publicly on the home page, you can hide one or switch the board off) and one by one |
-| Poll | The public **"Who will win?"** poll: when it is open (automatic = until the event starts, open, closed), live results and a reset of the votes. See "Public poll" below |
+| Poll | The public **"Who will win?"** poll: when it is open (automatic = open during the race and closed as soon as someone wins or the event ends; open; closed), live results and a reset of the votes. See "Public poll" below |
 | Audit | Who did what and when |
 | Accounts | Organizer accounts and roles (admin runs everything; moderator runs the race day) |
 
