@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Settings2 } from 'lucide-vue-next'
+import { PartyPopper, Settings2 } from 'lucide-vue-next'
 import { tx } from '@/i18n'
 import AgeBadge from '@/components/common/AgeBadge.vue'
 import LiveBadge from '@/components/common/LiveBadge.vue'
@@ -11,6 +11,8 @@ import InfoTip from '../components/InfoTip.vue'
 import PageHeader from '../components/PageHeader.vue'
 import RacerControlDialog from '../components/RacerControlDialog.vue'
 import StatCard from '../components/StatCard.vue'
+import { useRaceStore } from '@/stores/race'
+import { useRacersStore } from '@/stores/racers'
 import { useAdminStore } from '../stores/admin'
 import { useOverviewStore } from '../stores/overview'
 import type { OverviewRacer } from '../types'
@@ -32,6 +34,21 @@ onBeforeUnmount(() => {
 })
 
 const controlled = ref<OverviewRacer | null>(null)
+
+// Rehearse the winner's ceremony on this screen only (nothing is sent to the public).
+const race = useRaceStore()
+const racersStore = useRacersStore()
+const celebrateId = ref('')
+function celebrate() {
+  const row = data.value?.racers.find((r) => r.racer.id === celebrateId.value)
+  if (!row) return
+  if (!racersStore.getById(row.racer.id))
+    racersStore.setRacers(data.value!.racers.map((r) => r.racer))
+  race.previewWinner({
+    racerId: row.racer.id,
+    finalTimeSeconds: row.racer.finalTimeSeconds ?? row.racer.playedSeconds ?? 0,
+  })
+}
 
 /** Why this racer is where they are: the values the ranking compares, in order. */
 function rankWhy(row: OverviewRacer): string {
@@ -96,6 +113,21 @@ const levelTone = {
         🏆 Ganador: <strong>{{ winnerName }}</strong>
         <span v-if="data.winner.finalTimeSeconds"> · {{ hms(data.winner.finalTimeSeconds) }}</span>
       </p>
+
+      <section class="mb-6 flex flex-wrap items-center gap-2" aria-label="Animación de meta">
+        <select v-model="celebrateId" class="a-select" aria-label="Corredor para la animación">
+          <option value="" disabled>Probar animación de meta…</option>
+          <option v-for="r in data.racers" :key="r.racer.id" :value="r.racer.id">
+            {{ r.racer.displayName }}
+          </option>
+        </select>
+        <button type="button" class="a-btn a-btn-sm" :disabled="!celebrateId" @click="celebrate">
+          <PartyPopper class="size-4" aria-hidden="true" /> Ver animación
+        </button>
+        <InfoTip
+          text="Reproduce la ceremonia del ganador solo en tu pantalla, sin avisar a nadie más."
+        />
+      </section>
 
       <section v-if="data.alerts.length" aria-label="Alertas" class="mb-6 space-y-2">
         <div

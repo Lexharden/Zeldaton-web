@@ -677,6 +677,7 @@ export const en: Messages = {
     aria: 'Race finished',
     close: 'Close',
     first: 'FIRST PLACE',
+    dismiss: 'REMOVE CELEBRATION',
     replay: 'WATCH AGAIN',
     tribute: {
       l1: 'Every attempt, every late night and every lost heart brought you here.',

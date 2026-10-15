@@ -50,16 +50,30 @@ export const useRaceStore = defineStore('race', () => {
     if (s) s.isLive = isLive
   }
 
+  /** True while the winner on screen is only a rehearsal started from the panel. */
+  const previewing = ref(false)
+
   function declareWinner(info: FinishInfo) {
-    if (!winner.value) {
+    // A real finish always replaces a rehearsal; a second real finish never replaces the first.
+    if (!winner.value || previewing.value) {
       winner.value = info
       winnerDismissed.value = false
+      previewing.value = false
     }
+  }
+
+  /** Plays the finish ceremony locally (panel button). Nothing is sent to anyone else. */
+  function previewWinner(info: FinishInfo) {
+    if (winner.value && !previewing.value) return
+    winner.value = info
+    winnerDismissed.value = false
+    previewing.value = true
   }
 
   function clearWinner() {
     winner.value = null
     winnerDismissed.value = false
+    previewing.value = false
   }
 
   return {
@@ -77,5 +91,7 @@ export const useRaceStore = defineStore('race', () => {
     load,
     setStreamLive,
     declareWinner,
+    previewWinner,
+    previewing,
   }
 })

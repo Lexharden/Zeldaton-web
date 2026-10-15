@@ -27,8 +27,53 @@ import Avatar from '@/components/common/Avatar.vue'
  */
 const race = useRaceStore()
 const racers = useRacersStore()
-const racer = computed(() => racers.getById(race.winner?.racerId ?? ''))
-const show = computed(() => !!race.winner && !race.winnerDismissed && !!racer.value)
+/**
+ * The ceremony stays up on every public page until someone removes it with the bottom button. The
+ * winner comes from the live message or, after a reload, from the first racer who finished; the
+ * removal is remembered in this browser for that finish only (a reset or a new winner shows it again).
+ */
+const DISMISSED_KEY = 'zeldathon-finish-dismissed'
+const winnerInfo = computed(() => {
+  if (race.winner) return race.winner
+  const first = racers.getById(race.standings[0]?.racerId ?? '')
+  if (!first || first.status !== 'finished') return null
+  return {
+    racerId: first.id,
+    finalTimeSeconds: first.finalTimeSeconds,
+    finishedAtUtc: first.finishedAtUtc,
+  }
+})
+const finishKey = computed(
+  () => `${winnerInfo.value?.racerId}|${winnerInfo.value?.finishedAtUtc ?? ''}`,
+)
+const storedKey = ref(readStored())
+function readStored(): string {
+  try {
+    return localStorage.getItem(DISMISSED_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+function dismiss() {
+  race.winnerDismissed = true
+  // A rehearsal from the panel is never remembered.
+  if (race.previewing) return
+  storedKey.value = finishKey.value
+  try {
+    localStorage.setItem(DISMISSED_KEY, finishKey.value)
+  } catch {
+    /* storage unavailable: it just comes back next visit */
+  }
+}
+
+const racer = computed(() => racers.getById(winnerInfo.value?.racerId ?? ''))
+const show = computed(
+  () =>
+    !!winnerInfo.value &&
+    !race.winnerDismissed &&
+    (race.previewing || storedKey.value !== finishKey.value) &&
+    !!racer.value,
+)
 
 /** Xime gets her own words; everybody else gets the same ceremony with a general dedication. */
 const personal = computed(() => {
@@ -38,7 +83,7 @@ const personal = computed(() => {
 const tributeKey = computed(() => (personal.value ? 'finish.xime' : 'finish.tribute'))
 
 const letters = computed(() => Array.from(racer.value?.displayName ?? ''))
-const finalSeconds = computed(() => race.winner?.finalTimeSeconds ?? 0)
+const finalSeconds = computed(() => winnerInfo.value?.finalTimeSeconds ?? 0)
 
 const NBSP = String.fromCharCode(160)
 const HEARTS = 7
@@ -280,15 +325,6 @@ onBeforeUnmount(stop)
           aria-hidden="true"
         />
 
-        <button
-          type="button"
-          class="fixed right-4 top-4 z-10 text-muted hover:text-white"
-          :aria-label="t('finish.close')"
-          @click="race.winnerDismissed = true"
-        >
-          <X class="size-7" />
-        </button>
-
         <div class="relative z-[1] flex w-full max-w-3xl flex-col items-center text-center">
           <svg class="triforce" viewBox="0 0 100 88" width="76" height="67" aria-hidden="true">
             <defs>
@@ -377,7 +413,13 @@ onBeforeUnmount(stop)
             >
             <button type="button" class="btn" @click="replay">{{ t('finish.replay') }}</button>
           </div>
+          <div class="h-20" aria-hidden="true" />
         </div>
+      </div>
+      <div class="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex justify-center p-4">
+        <button type="button" class="btn btn-gold pointer-events-auto" @click="dismiss">
+          <X class="size-4" aria-hidden="true" /> {{ t('finish.dismiss') }}
+        </button>
       </div>
     </div>
   </Transition>

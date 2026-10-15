@@ -19,6 +19,7 @@ import {
   Users,
 } from 'lucide-vue-next'
 import { adminApi } from './api/AdminApi'
+import FinishOverlay from '@/components/race/FinishOverlay.vue'
 import ConfirmHost from './components/ConfirmHost.vue'
 import Modal from './components/Modal.vue'
 import ToastHost from './components/ToastHost.vue'
@@ -183,6 +184,7 @@ async function changePassword() {
 
     <ConfirmHost />
     <ToastHost />
+    <FinishOverlay />
 
     <Modal :open="pwOpen" title="Cambiar mi contraseña" @close="pwOpen = false">
       <form class="space-y-4" @submit.prevent="changePassword">

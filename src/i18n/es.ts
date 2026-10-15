@@ -687,6 +687,7 @@ export const es = {
     aria: 'Carrera terminada',
     close: 'Cerrar',
     first: 'PRIMER LUGAR',
+    dismiss: 'QUITAR CELEBRACIÓN',
     replay: 'VER OTRA VEZ',
     tribute: {
       l1: 'Cada intento, cada madrugada y cada corazón perdido te trajeron hasta aquí.',
