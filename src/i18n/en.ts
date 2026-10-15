@@ -676,6 +676,18 @@ export const en: Messages = {
     celebration: 'WATCH CELEBRATION',
     aria: 'Race finished',
     close: 'Close',
+    first: 'FIRST PLACE',
+    replay: 'WATCH AGAIN',
+    tribute: {
+      l1: 'Every attempt, every late night and every lost heart brought you here.',
+      l2: 'Today the whole community stands up for you.',
+      l3: 'Thank you for letting us walk with you, {name}.',
+    },
+    xime: {
+      l1: 'Every heart that broke, every attempt and every late night… was worth it.',
+      l2: 'You were never alone: thousands of people walked this road with you.',
+      l3: 'You are the Hero of Time, {name}. Thank you for everything. 💚',
+    },
   },
   footer: {
     explore: 'EXPLORE',

@@ -686,6 +686,18 @@ export const es = {
     celebration: 'VER LA CELEBRACIÓN',
     aria: 'Carrera terminada',
     close: 'Cerrar',
+    first: 'PRIMER LUGAR',
+    replay: 'VER OTRA VEZ',
+    tribute: {
+      l1: 'Cada intento, cada madrugada y cada corazón perdido te trajeron hasta aquí.',
+      l2: 'Hoy toda la comunidad se pone de pie para ti.',
+      l3: 'Gracias por dejarnos acompañarte, {name}.',
+    },
+    xime: {
+      l1: 'Cada corazón que se rompió, cada intento y cada madrugada… valieron la pena.',
+      l2: 'Nunca estuviste sola: miles de personas caminaron este camino contigo.',
+      l3: 'Eres la Heroína del Tiempo, {name}. Gracias por tanto. 💚',
+    },
   },
   footer: {
     explore: 'EXPLORAR',
